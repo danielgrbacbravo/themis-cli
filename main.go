@@ -3,12 +3,12 @@ package main
 // system packages
 
 import (
-
 	// local packages
 	"log"
 	"themis-cli/auth"
 	"themis-cli/client"
 	"themis-cli/config"
+	"themis-cli/parser"
 )
 
 const (
@@ -21,12 +21,13 @@ const (
 func main() {
 
 	httpClient := client.InitializeClient()
+	// the goquery document represents the parsed HTML document of the login page (baseURL + loginRoute)
 	document, err := client.GetLoginPage(httpClient, baseURL, loginRoute)
 	if err != nil {
 		log.Fatal(err)
 		return
 	}
-	// get csrfToken from goquery document
+	// get csrfToken from login page
 	csrfToken, err := auth.GetCsrfToken(document)
 	if err != nil {
 		log.Fatal(err)
@@ -40,6 +41,7 @@ func main() {
 		return
 	}
 
+	// login to Themis and get the authenticated http.Client
 	httpClient, err = auth.Login(httpClient, baseURL+loginRoute, loginData)
 	if err != nil {
 		log.Fatal(err)
@@ -47,13 +49,43 @@ func main() {
 	}
 
 	// get user data
-	name := client.GetFullname(&httpClient, baseURL)
-	log.Println(name)
+	name := client.GetFullName(&httpClient, baseURL)
+	log.Default().Println(name)
 	email := client.GetEmail(&httpClient, baseURL)
-	log.Println(email)
+	log.Default().Println(email)
 	lastLoggedIn := client.GetLastLoggedIn(&httpClient, baseURL)
-	log.Println(lastLoggedIn)
+	log.Default().Println(lastLoggedIn)
 	firstLoggedIn := client.GetFirstLoggedIn(&httpClient, baseURL)
-	log.Println(firstLoggedIn)
+	log.Default().Println(firstLoggedIn)
 
+	courses, err := parser.GetAssignmentsOnPage(&httpClient, baseURL)
+	if err != nil {
+		log.Fatal(err)
+		return
+	}
+	for _, course := range courses {
+		assignments, err := parser.GetAssignmentsOnPage(&httpClient, course["url"])
+		if err != nil {
+			log.Fatal(err)
+			return
+		}
+		for _, assignment := range assignments {
+			subAssigments, err := parser.GetAssignmentsOnPage(&httpClient, assignment["url"])
+			if err != nil {
+				log.Fatal(err)
+				return
+			}
+			for _, subAssignment := range subAssigments {
+				log.Print(subAssignment["name"] + " " + subAssignment["url"])
+				activities, err := parser.GetAssignmentsOnPage(&httpClient, subAssignment["url"])
+				if err != nil {
+					log.Fatal(err)
+					return
+				}
+				for _, activity := range activities {
+					log.Print(activity["name"] + " " + activity["url"])
+				}
+			}
+		}
+	}
 }

@@ -74,7 +74,7 @@ func GetDataFromUserPage(client *http.Client, baseURL string, userDataUrl string
 // GetFullname retrieves the full name from the provided goquery.Document.
 // It parses the document and extracts the full name from the relevant section.
 // The full name is returned as a string.
-func GetFullname(client *http.Client, baseURL string) string {
+func GetFullName(client *http.Client, baseURL string) string {
 	const userDataUrl = "/user"
 	doc, err := GetDataFromUserPage(client, baseURL, userDataUrl)
 	if err != nil {
@@ -135,9 +135,11 @@ func GetEmail(client *http.Client, baseURL string) string {
 		log.Fatal(err)
 	}
 	userData := make(map[string]string)
+	// find all divs with class cfg-line
 	doc.Find("section.border.accent div.cfg-container div.cfg-line").Each(func(i int, s *goquery.Selection) {
 		key := s.Find("span.cfg-key").Text()
 		value := s.Find("span.cfg-val").Text()
+		// trim spaces from key and value
 		userData[strings.TrimSpace(key)] = strings.TrimSpace(value)
 	})
 	return userData["Email:"]
@@ -156,9 +158,14 @@ func GetFirstLoggedIn(client *http.Client, baseURL string) string {
 	doc.Find("section.border.accent div.cfg-container div.cfg-line").Each(func(i int, s *goquery.Selection) {
 		key := s.Find("span.cfg-key").Text()
 		value := s.Find("span.cfg-val").Text()
+		// trim spaces from key and value
 		userData[strings.TrimSpace(key)] = strings.TrimSpace(value)
 	})
-	return userData["First login:"]
+	// note that the date in the fromat Sat Nov 18 2023 11:54:03 GMT+0100
+	// returns the first 15 characters of the string (Sat Nov 18 2023)
+
+	output := userData["First login:"]
+	return output[:15]
 }
 
 // getLastLoginDate retrieves the last login date from the provided goquery.Document.
@@ -176,5 +183,7 @@ func GetLastLoggedIn(client *http.Client, baseURL string) string {
 		value := s.Find("span.cfg-val").Text()
 		userData[strings.TrimSpace(key)] = strings.TrimSpace(value)
 	})
-	return userData["Last login:"]
+	output := userData["Last login:"]
+	return output[:15]
+
 }
