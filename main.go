@@ -8,7 +8,6 @@ import (
 	"themis-cli/auth"
 	"themis-cli/client"
 	"themis-cli/config"
-	"themis-cli/parser"
 	"themis-cli/tree"
 )
 
@@ -59,49 +58,14 @@ func main() {
 	firstLoggedIn := client.GetFirstLoggedIn(&httpClient, baseURL)
 	log.Default().Println(firstLoggedIn)
 
-	courses, err := parser.GetAssignmentsOnPage(&httpClient, baseURL)
+	URL := "https://themis.housing.rug.nl/course/2023-2024/progfun/"
+	rootNode := tree.BuildRootAssignmentNode("root", URL)
+	rootNode, err = tree.PullAssignmentsFromThemisAndBuildTree(&httpClient, URL, rootNode, 2)
 	if err != nil {
 		log.Fatal(err)
 		return
 	}
-	courseNodes := make([]*tree.AssignmentNode, 0)
-	for i, course := range courses {
-		courseNodes = append(courseNodes, tree.BuildRootAssignmentNode(course["name"], course["url"]))
-		assignments, err := parser.GetAssignmentsOnPage(&httpClient, course["url"])
+	log.Default().Println(rootNode.Name)
+	tree.SaveAssignmentTreeToJSON(rootNode, 2)
 
-		if err != nil {
-			log.Fatal(err)
-			return
-		}
-		for _, assignment := range assignments {
-			if i >= len(courseNodes) {
-				log.Println("Index out of range, skipping iteration")
-				continue
-			}
-			log.Default().Println(i)
-			currentAssignmentNode := tree.BuildAssignmentNode(courseNodes[i], assignment["name"], assignment["url"])
-			courseNodes[i].AppendChild(currentAssignmentNode)
-			subAssigments, err := parser.GetAssignmentsOnPage(&httpClient, assignment["url"])
-
-			if err != nil {
-				log.Fatal(err)
-				return
-			}
-
-			for _, subAssignment := range subAssigments {
-				currentSubAssignmentNode := tree.BuildAssignmentNode(currentAssignmentNode, subAssignment["name"], subAssignment["url"])
-				currentAssignmentNode.AppendChild(currentSubAssignmentNode)
-				activity, err := parser.GetAssignmentsOnPage(&httpClient, subAssignment["url"])
-				if err != nil {
-					log.Fatal(err)
-					return
-				}
-
-				for _, activity := range activity {
-					currentActivityNode := tree.BuildAssignmentNode(currentSubAssignmentNode, activity["name"], activity["url"])
-					currentSubAssignmentNode.AppendChild(currentActivityNode)
-				}
-			}
-		}
-	}
 }

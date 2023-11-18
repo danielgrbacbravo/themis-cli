@@ -1,0 +1,836 @@
+{
+    "Parent": null,
+    "Name": "root",
+    "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/"
+}
+{
+    "Parent": {
+        "Parent": null,
+        "Name": "root",
+        "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/"
+    },
+    "Name": "Lab Session 1",
+    "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/lab1"
+}
+{
+    "Parent": {
+        "Parent": {
+            "Parent": null,
+            "Name": "root",
+            "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/"
+        },
+        "Name": "Lab Session 1",
+        "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/lab1"
+    },
+    "Name": "Hello",
+    "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/lab1/Hello"
+}
+{
+    "Parent": {
+        "Parent": {
+            "Parent": null,
+            "Name": "root",
+            "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/"
+        },
+        "Name": "Lab Session 1",
+        "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/lab1"
+    },
+    "Name": "Repro",
+    "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/lab1/Repro"
+}
+{
+    "Parent": {
+        "Parent": {
+            "Parent": null,
+            "Name": "root",
+            "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/"
+        },
+        "Name": "Lab Session 1",
+        "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/lab1"
+    },
+    "Name": "Number reversal",
+    "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/lab1/numrev"
+}
+{
+    "Parent": {
+        "Parent": {
+            "Parent": null,
+            "Name": "root",
+            "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/"
+        },
+        "Name": "Lab Session 1",
+        "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/lab1"
+    },
+    "Name": "Drop reversal",
+    "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/lab1/droprev"
+}
+{
+    "Parent": {
+        "Parent": {
+            "Parent": null,
+            "Name": "root",
+            "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/"
+        },
+        "Name": "Lab Session 1",
+        "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/lab1"
+    },
+    "Name": "Bounding box",
+    "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/lab1/bbox"
+}
+{
+    "Parent": {
+        "Parent": null,
+        "Name": "root",
+        "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/"
+    },
+    "Name": "Lab Session 2",
+    "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/lab2"
+}
+{
+    "Parent": {
+        "Parent": {
+            "Parent": null,
+            "Name": "root",
+            "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/"
+        },
+        "Name": "Lab Session 2",
+        "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/lab2"
+    },
+    "Name": "Very odd numbers",
+    "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/lab2/veryOdd"
+}
+{
+    "Parent": {
+        "Parent": {
+            "Parent": null,
+            "Name": "root",
+            "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/"
+        },
+        "Name": "Lab Session 2",
+        "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/lab2"
+    },
+    "Name": "Recurrence",
+    "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/lab2/recurrence"
+}
+{
+    "Parent": {
+        "Parent": {
+            "Parent": null,
+            "Name": "root",
+            "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/"
+        },
+        "Name": "Lab Session 2",
+        "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/lab2"
+    },
+    "Name": "Powerful property",
+    "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/lab2/powerful"
+}
+{
+    "Parent": {
+        "Parent": {
+            "Parent": null,
+            "Name": "root",
+            "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/"
+        },
+        "Name": "Lab Session 2",
+        "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/lab2"
+    },
+    "Name": "Twin primes",
+    "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/lab2/twin"
+}
+{
+    "Parent": {
+        "Parent": {
+            "Parent": null,
+            "Name": "root",
+            "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/"
+        },
+        "Name": "Lab Session 2",
+        "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/lab2"
+    },
+    "Name": "Sum of Cubes?",
+    "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/lab2/sumOfCubes"
+}
+{
+    "Parent": {
+        "Parent": null,
+        "Name": "root",
+        "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/"
+    },
+    "Name": "Lab Session 3",
+    "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/lab3"
+}
+{
+    "Parent": {
+        "Parent": {
+            "Parent": null,
+            "Name": "root",
+            "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/"
+        },
+        "Name": "Lab Session 3",
+        "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/lab3"
+    },
+    "Name": "Function Evaluator",
+    "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/lab3/funceval"
+}
+{
+    "Parent": {
+        "Parent": {
+            "Parent": null,
+            "Name": "root",
+            "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/"
+        },
+        "Name": "Lab Session 3",
+        "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/lab3"
+    },
+    "Name": "Discs",
+    "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/lab3/discs"
+}
+{
+    "Parent": {
+        "Parent": {
+            "Parent": null,
+            "Name": "root",
+            "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/"
+        },
+        "Name": "Lab Session 3",
+        "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/lab3"
+    },
+    "Name": "Assembly Code",
+    "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/lab3/assembly"
+}
+{
+    "Parent": {
+        "Parent": {
+            "Parent": null,
+            "Name": "root",
+            "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/"
+        },
+        "Name": "Lab Session 3",
+        "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/lab3"
+    },
+    "Name": "Multiplying polynomials",
+    "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/lab3/polynomialMul"
+}
+{
+    "Parent": {
+        "Parent": {
+            "Parent": null,
+            "Name": "root",
+            "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/"
+        },
+        "Name": "Lab Session 3",
+        "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/lab3"
+    },
+    "Name": "Supernacci",
+    "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/lab3/largeFib"
+}
+{
+    "Parent": {
+        "Parent": null,
+        "Name": "root",
+        "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/"
+    },
+    "Name": "Lab Session 4",
+    "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/lab4"
+}
+{
+    "Parent": {
+        "Parent": {
+            "Parent": null,
+            "Name": "root",
+            "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/"
+        },
+        "Name": "Lab Session 4",
+        "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/lab4"
+    },
+    "Name": "Comparing Fractions",
+    "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/lab4/fractions"
+}
+{
+    "Parent": {
+        "Parent": {
+            "Parent": null,
+            "Name": "root",
+            "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/"
+        },
+        "Name": "Lab Session 4",
+        "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/lab4"
+    },
+    "Name": "Time Difference",
+    "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/lab4/timediff"
+}
+{
+    "Parent": {
+        "Parent": {
+            "Parent": null,
+            "Name": "root",
+            "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/"
+        },
+        "Name": "Lab Session 4",
+        "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/lab4"
+    },
+    "Name": "Peculiar Numbers",
+    "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/lab4/peculiar"
+}
+{
+    "Parent": {
+        "Parent": {
+            "Parent": null,
+            "Name": "root",
+            "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/"
+        },
+        "Name": "Lab Session 4",
+        "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/lab4"
+    },
+    "Name": "Curzon Numbers",
+    "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/lab4/curzon"
+}
+{
+    "Parent": {
+        "Parent": {
+            "Parent": null,
+            "Name": "root",
+            "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/"
+        },
+        "Name": "Lab Session 4",
+        "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/lab4"
+    },
+    "Name": "Vigenere Cipher",
+    "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/lab4/vigenere"
+}
+{
+    "Parent": {
+        "Parent": null,
+        "Name": "root",
+        "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/"
+    },
+    "Name": "Lab Session 5",
+    "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/lab5"
+}
+{
+    "Parent": {
+        "Parent": {
+            "Parent": null,
+            "Name": "root",
+            "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/"
+        },
+        "Name": "Lab Session 5",
+        "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/lab5"
+    },
+    "Name": "Histogram",
+    "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/lab5/histogram"
+}
+{
+    "Parent": {
+        "Parent": {
+            "Parent": null,
+            "Name": "root",
+            "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/"
+        },
+        "Name": "Lab Session 5",
+        "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/lab5"
+    },
+    "Name": "Resolution rule",
+    "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/lab5/resolution"
+}
+{
+    "Parent": {
+        "Parent": {
+            "Parent": null,
+            "Name": "root",
+            "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/"
+        },
+        "Name": "Lab Session 5",
+        "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/lab5"
+    },
+    "Name": "Zeckendorf representation",
+    "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/lab5/zeckendorf"
+}
+{
+    "Parent": {
+        "Parent": {
+            "Parent": null,
+            "Name": "root",
+            "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/"
+        },
+        "Name": "Lab Session 5",
+        "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/lab5"
+    },
+    "Name": "Searching sums",
+    "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/lab5/sums"
+}
+{
+    "Parent": {
+        "Parent": {
+            "Parent": null,
+            "Name": "root",
+            "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/"
+        },
+        "Name": "Lab Session 5",
+        "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/lab5"
+    },
+    "Name": "Word search",
+    "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/lab5/wordsearch"
+}
+{
+    "Parent": {
+        "Parent": null,
+        "Name": "root",
+        "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/"
+    },
+    "Name": "Lab Session 6",
+    "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/lab6"
+}
+{
+    "Parent": {
+        "Parent": {
+            "Parent": null,
+            "Name": "root",
+            "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/"
+        },
+        "Name": "Lab Session 6",
+        "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/lab6"
+    },
+    "Name": "Balanced Splitter",
+    "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/lab6/split"
+}
+{
+    "Parent": {
+        "Parent": {
+            "Parent": null,
+            "Name": "root",
+            "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/"
+        },
+        "Name": "Lab Session 6",
+        "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/lab6"
+    },
+    "Name": "Who's next",
+    "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/lab6/next"
+}
+{
+    "Parent": {
+        "Parent": {
+            "Parent": null,
+            "Name": "root",
+            "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/"
+        },
+        "Name": "Lab Session 6",
+        "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/lab6"
+    },
+    "Name": "To the other side",
+    "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/lab6/otherSide"
+}
+{
+    "Parent": {
+        "Parent": {
+            "Parent": null,
+            "Name": "root",
+            "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/"
+        },
+        "Name": "Lab Session 6",
+        "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/lab6"
+    },
+    "Name": "Missing digit",
+    "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/lab6/missing"
+}
+{
+    "Parent": {
+        "Parent": {
+            "Parent": null,
+            "Name": "root",
+            "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/"
+        },
+        "Name": "Lab Session 6",
+        "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/lab6"
+    },
+    "Name": "Epoch",
+    "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/lab6/epoch"
+}
+{
+    "Parent": {
+        "Parent": {
+            "Parent": null,
+            "Name": "root",
+            "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/"
+        },
+        "Name": "Lab Session 6",
+        "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/lab6"
+    },
+    "Name": "Right-truncatable primes",
+    "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/lab6/rtruncPrime"
+}
+{
+    "Parent": {
+        "Parent": {
+            "Parent": null,
+            "Name": "root",
+            "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/"
+        },
+        "Name": "Lab Session 6",
+        "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/lab6"
+    },
+    "Name": "Hoare Triple",
+    "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/lab6/hoareTriple"
+}
+{
+    "Parent": {
+        "Parent": {
+            "Parent": null,
+            "Name": "root",
+            "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/"
+        },
+        "Name": "Lab Session 6",
+        "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/lab6"
+    },
+    "Name": "Square n, Cube n",
+    "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/lab6/sqcube"
+}
+{
+    "Parent": {
+        "Parent": null,
+        "Name": "root",
+        "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/"
+    },
+    "Name": "Lab Session 7",
+    "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/lab7"
+}
+{
+    "Parent": {
+        "Parent": {
+            "Parent": null,
+            "Name": "root",
+            "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/"
+        },
+        "Name": "Lab Session 7",
+        "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/lab7"
+    },
+    "Name": "Exercise 1",
+    "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/lab7/ex1"
+}
+{
+    "Parent": {
+        "Parent": {
+            "Parent": null,
+            "Name": "root",
+            "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/"
+        },
+        "Name": "Lab Session 7",
+        "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/lab7"
+    },
+    "Name": "Exercise 2",
+    "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/lab7/ex2"
+}
+{
+    "Parent": {
+        "Parent": {
+            "Parent": null,
+            "Name": "root",
+            "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/"
+        },
+        "Name": "Lab Session 7",
+        "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/lab7"
+    },
+    "Name": "Exercise 3 (inverse of exercise 2)",
+    "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/lab7/ex3"
+}
+{
+    "Parent": {
+        "Parent": {
+            "Parent": null,
+            "Name": "root",
+            "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/"
+        },
+        "Name": "Lab Session 7",
+        "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/lab7"
+    },
+    "Name": "Exercise 4",
+    "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/lab7/ex4"
+}
+{
+    "Parent": {
+        "Parent": {
+            "Parent": null,
+            "Name": "root",
+            "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/"
+        },
+        "Name": "Lab Session 7",
+        "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/lab7"
+    },
+    "Name": "Recurrence",
+    "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/lab7/recurrence"
+}
+{
+    "Parent": {
+        "Parent": {
+            "Parent": null,
+            "Name": "root",
+            "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/"
+        },
+        "Name": "Lab Session 7",
+        "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/lab7"
+    },
+    "Name": "Mystery",
+    "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/lab7/mystery"
+}
+{
+    "Parent": {
+        "Parent": {
+            "Parent": null,
+            "Name": "root",
+            "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/"
+        },
+        "Name": "Lab Session 7",
+        "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/lab7"
+    },
+    "Name": "Divisible by 3",
+    "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/lab7/div3"
+}
+{
+    "Parent": {
+        "Parent": {
+            "Parent": null,
+            "Name": "root",
+            "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/"
+        },
+        "Name": "Lab Session 7",
+        "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/lab7"
+    },
+    "Name": "Sum of cubes",
+    "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/lab7/cubesum"
+}
+{
+    "Parent": {
+        "Parent": {
+            "Parent": null,
+            "Name": "root",
+            "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/"
+        },
+        "Name": "Lab Session 7",
+        "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/lab7"
+    },
+    "Name": "exponentiation",
+    "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/lab7/exp"
+}
+{
+    "Parent": {
+        "Parent": null,
+        "Name": "root",
+        "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/"
+    },
+    "Name": "Tutorial 4: practe 1/3rd term",
+    "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/tutorial4"
+}
+{
+    "Parent": {
+        "Parent": {
+            "Parent": null,
+            "Name": "root",
+            "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/"
+        },
+        "Name": "Tutorial 4: practe 1/3rd term",
+        "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/tutorial4"
+    },
+    "Name": "Light Numbers",
+    "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/tutorial4/light"
+}
+{
+    "Parent": {
+        "Parent": {
+            "Parent": null,
+            "Name": "root",
+            "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/"
+        },
+        "Name": "Tutorial 4: practe 1/3rd term",
+        "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/tutorial4"
+    },
+    "Name": "Nested Palindromes",
+    "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/tutorial4/nestpals"
+}
+{
+    "Parent": {
+        "Parent": {
+            "Parent": null,
+            "Name": "root",
+            "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/"
+        },
+        "Name": "Tutorial 4: practe 1/3rd term",
+        "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/tutorial4"
+    },
+    "Name": "Lesser Emirps",
+    "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/tutorial4/emirp"
+}
+{
+    "Parent": {
+        "Parent": {
+            "Parent": null,
+            "Name": "root",
+            "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/"
+        },
+        "Name": "Tutorial 4: practe 1/3rd term",
+        "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/tutorial4"
+    },
+    "Name": "Operations",
+    "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/tutorial4/actions"
+}
+{
+    "Parent": {
+        "Parent": {
+            "Parent": null,
+            "Name": "root",
+            "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/"
+        },
+        "Name": "Tutorial 4: practe 1/3rd term",
+        "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/tutorial4"
+    },
+    "Name": "Encryption",
+    "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/tutorial4/encryption"
+}
+{
+    "Parent": {
+        "Parent": null,
+        "Name": "root",
+        "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/"
+    },
+    "Name": "Practice: 1st Exam (no grade)",
+    "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/practiceThirdTerm"
+}
+{
+    "Parent": {
+        "Parent": {
+            "Parent": null,
+            "Name": "root",
+            "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/"
+        },
+        "Name": "Practice: 1st Exam (no grade)",
+        "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/practiceThirdTerm"
+    },
+    "Name": "Cigarette butts",
+    "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/practiceThirdTerm/butts"
+}
+{
+    "Parent": {
+        "Parent": {
+            "Parent": null,
+            "Name": "root",
+            "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/"
+        },
+        "Name": "Practice: 1st Exam (no grade)",
+        "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/practiceThirdTerm"
+    },
+    "Name": "Right-truncatable primes",
+    "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/practiceThirdTerm/rtruncPrime"
+}
+{
+    "Parent": {
+        "Parent": {
+            "Parent": null,
+            "Name": "root",
+            "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/"
+        },
+        "Name": "Practice: 1st Exam (no grade)",
+        "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/practiceThirdTerm"
+    },
+    "Name": "Running in circles",
+    "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/practiceThirdTerm/cycle"
+}
+{
+    "Parent": {
+        "Parent": {
+            "Parent": null,
+            "Name": "root",
+            "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/"
+        },
+        "Name": "Practice: 1st Exam (no grade)",
+        "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/practiceThirdTerm"
+    },
+    "Name": "DNA matching",
+    "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/practiceThirdTerm/actg"
+}
+{
+    "Parent": {
+        "Parent": {
+            "Parent": null,
+            "Name": "root",
+            "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/"
+        },
+        "Name": "Practice: 1st Exam (no grade)",
+        "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/practiceThirdTerm"
+    },
+    "Name": "Sliding puzzle",
+    "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/practiceThirdTerm/slidingPuzzle"
+}
+{
+    "Parent": {
+        "Parent": null,
+        "Name": "root",
+        "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/"
+    },
+    "Name": "Practice: Resit 1st Exam (no grade)",
+    "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/practiceResitThirdTerm"
+}
+{
+    "Parent": {
+        "Parent": {
+            "Parent": null,
+            "Name": "root",
+            "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/"
+        },
+        "Name": "Practice: Resit 1st Exam (no grade)",
+        "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/practiceResitThirdTerm"
+    },
+    "Name": "Epoch",
+    "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/practiceResitThirdTerm/epoch"
+}
+{
+    "Parent": {
+        "Parent": {
+            "Parent": null,
+            "Name": "root",
+            "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/"
+        },
+        "Name": "Practice: Resit 1st Exam (no grade)",
+        "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/practiceResitThirdTerm"
+    },
+    "Name": "Friday the 13th",
+    "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/practiceResitThirdTerm/friday"
+}
+{
+    "Parent": {
+        "Parent": {
+            "Parent": null,
+            "Name": "root",
+            "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/"
+        },
+        "Name": "Practice: Resit 1st Exam (no grade)",
+        "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/practiceResitThirdTerm"
+    },
+    "Name": "Circular primes",
+    "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/practiceResitThirdTerm/circularPrime"
+}
+{
+    "Parent": {
+        "Parent": {
+            "Parent": null,
+            "Name": "root",
+            "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/"
+        },
+        "Name": "Practice: Resit 1st Exam (no grade)",
+        "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/practiceResitThirdTerm"
+    },
+    "Name": "Isograms",
+    "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/practiceResitThirdTerm/isograms"
+}
+{
+    "Parent": {
+        "Parent": {
+            "Parent": null,
+            "Name": "root",
+            "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/"
+        },
+        "Name": "Practice: Resit 1st Exam (no grade)",
+        "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/practiceResitThirdTerm"
+    },
+    "Name": "Most frequent value",
+    "URL": "https://themis.housing.rug.nl/course/2023-2024/progfun/practiceResitThirdTerm/frequent"
+}
