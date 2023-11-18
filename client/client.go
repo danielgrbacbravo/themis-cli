@@ -185,5 +185,4 @@ func GetLastLoggedIn(client *http.Client, baseURL string) string {
 	})
 	output := userData["Last login:"]
 	return output[:15]
-
 }

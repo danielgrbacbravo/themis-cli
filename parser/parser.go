@@ -61,3 +61,21 @@ func GetAssignmentsOnPage(client *http.Client, URL string) ([]map[string]string,
 	})
 	return assignments, nil
 }
+
+func doesContainAssignmentsOnPage(client *http.Client, URL string) (isLeafNode bool, err error) {
+	exists := true
+	resp, err := client.Get(URL)
+	if err != nil {
+		return false, err
+	}
+	defer resp.Body.Close()
+	doc, err := goquery.NewDocumentFromReader(resp.Body)
+	if err != nil {
+		return false, err
+	}
+	doc.Find("div.subsec.round.shade.ass-children ul.round li").Each(func(i int, s *goquery.Selection) {
+		anchor := s.Find("span.ass-link a")
+		_, exists = anchor.Attr("href")
+	})
+	return exists, nil
+}

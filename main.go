@@ -9,6 +9,7 @@ import (
 	"themis-cli/client"
 	"themis-cli/config"
 	"themis-cli/parser"
+	"themis-cli/tree"
 )
 
 const (
@@ -63,27 +64,42 @@ func main() {
 		log.Fatal(err)
 		return
 	}
-	for _, course := range courses {
+	courseNodes := make([]*tree.AssignmentNode, 0)
+	for i, course := range courses {
+		courseNodes = append(courseNodes, tree.BuildRootAssignmentNode(course["name"], course["url"]))
 		assignments, err := parser.GetAssignmentsOnPage(&httpClient, course["url"])
+
 		if err != nil {
 			log.Fatal(err)
 			return
 		}
 		for _, assignment := range assignments {
+			if i >= len(courseNodes) {
+				log.Println("Index out of range, skipping iteration")
+				continue
+			}
+			log.Default().Println(i)
+			currentAssignmentNode := tree.BuildAssignmentNode(courseNodes[i], assignment["name"], assignment["url"])
+			courseNodes[i].AppendChild(currentAssignmentNode)
 			subAssigments, err := parser.GetAssignmentsOnPage(&httpClient, assignment["url"])
+
 			if err != nil {
 				log.Fatal(err)
 				return
 			}
+
 			for _, subAssignment := range subAssigments {
-				log.Print(subAssignment["name"] + " " + subAssignment["url"])
-				activities, err := parser.GetAssignmentsOnPage(&httpClient, subAssignment["url"])
+				currentSubAssignmentNode := tree.BuildAssignmentNode(currentAssignmentNode, subAssignment["name"], subAssignment["url"])
+				currentAssignmentNode.AppendChild(currentSubAssignmentNode)
+				activity, err := parser.GetAssignmentsOnPage(&httpClient, subAssignment["url"])
 				if err != nil {
 					log.Fatal(err)
 					return
 				}
-				for _, activity := range activities {
-					log.Print(activity["name"] + " " + activity["url"])
+
+				for _, activity := range activity {
+					currentActivityNode := tree.BuildAssignmentNode(currentSubAssignmentNode, activity["name"], activity["url"])
+					currentSubAssignmentNode.AppendChild(currentActivityNode)
 				}
 			}
 		}
