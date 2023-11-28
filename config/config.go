@@ -9,7 +9,6 @@ import (
 )
 
 func GenerateLoginURLValuesFromENV(csrfToken string) (loginData url.Values, err error) {
-	CheckENVFile()
 	loginData = url.Values{
 		"user":     {GetUsernameFromENV()},
 		"password": {GetPasswordFromENV()},
@@ -22,7 +21,7 @@ func GenerateLoginURLValuesFromENV(csrfToken string) (loginData url.Values, err 
 	return loginData, nil
 }
 
-func GetUsernameFromENV() string {
+func GetUsernameFromENV() (username string) {
 	err := godotenv.Load()
 	if err != nil {
 		log.Fatal("Error loading .env file")
@@ -38,7 +37,23 @@ func GetPasswordFromENV() string {
 	return os.Getenv("PASSWORD")
 }
 
-func generateENVFile() {
+func SetUsernameInENV(username string) {
+	err := godotenv.Load()
+	if err != nil {
+		log.Fatal("Error loading .env file")
+	}
+	os.Setenv("USERNAME", username)
+}
+
+func SetPasswordInENV(password string) {
+	err := godotenv.Load()
+	if err != nil {
+		log.Fatal("Error loading .env file")
+	}
+	os.Setenv("PASSWORD", password)
+}
+
+func GenerateENVFile() {
 	f, err := os.Create(".env")
 	if err != nil {
 		log.Fatal(err)
@@ -51,8 +66,16 @@ func generateENVFile() {
 	}
 }
 
-func CheckENVFile() {
+func DoesENVFileExist() bool {
 	if _, err := os.Stat(".env"); os.IsNotExist(err) {
-		generateENVFile()
+		return false
 	}
+	return true
+}
+
+func IsENVFileEmpty() bool {
+	if GetUsernameFromENV() == "" || GetPasswordFromENV() == "" {
+		return true
+	}
+	return false
 }

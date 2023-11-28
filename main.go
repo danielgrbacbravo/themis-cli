@@ -9,6 +9,7 @@ import (
 	"themis-cli/client"
 	"themis-cli/config"
 	"themis-cli/tree"
+	"themis-cli/ui"
 )
 
 const (
@@ -19,6 +20,8 @@ const (
 )
 
 func main() {
+
+	ui.GetLoginCredientialsFromTUI(false)
 
 	httpClient := client.InitializeClient()
 	// the goquery document represents the parsed HTML document of the login page (baseURL + loginRoute)
@@ -66,6 +69,4 @@ func main() {
 		return
 	}
 	log.Default().Println(rootNode.Name)
-	tree.SaveAssignmentTreeToJSON(rootNode, 2)
-
 }

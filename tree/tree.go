@@ -1,12 +1,11 @@
 package tree
 
 import (
-	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
-	"os"
 	"themis-cli/parser"
+
 )
 
 const (
@@ -59,64 +58,17 @@ func PullAssignmentsFromThemisAndBuildTree(client *http.Client, URL string, root
 	for _, assignment := range assignments {
 		assignmentNode := BuildAssignmentNode(rootNode, assignment["name"], assignment["url"])
 		rootNode.AppendChild(assignmentNode)
-	}
 
-	// build tree
-	if depth > 0 {
-		for _, child := range rootNode.children {
-			child, err = PullAssignmentsFromThemisAndBuildTree(client, child.URL, child, depth-1)
-			if err != nil {
-				return nil, fmt.Errorf("error building tree: %v", err)
+		// build tree
+		if depth > 0 {
+			for _, child := range rootNode.children {
+				child, err = PullAssignmentsFromThemisAndBuildTree(client, child.URL, child, depth-1)
+				if err != nil {
+					return nil, fmt.Errorf("error building tree: %v", err)
+				}
 			}
 		}
 	}
 
 	return rootNode, nil
-}
-
-func SaveAssignmentTreeToJSON(rootNode *AssignmentNode, depth int) error {
-	file, err := os.Create("assignment_tree.json")
-	if err != nil {
-		return fmt.Errorf("error creating file: %v", err)
-	}
-
-	defer func() {
-		if closeErr := file.Close(); closeErr != nil {
-			log.Printf("error closing file: %v", closeErr)
-		}
-	}()
-
-	encoder := json.NewEncoder(file)
-	encoder.SetIndent("", "    ") // format output with 4 spaces
-
-	err = encodeAssignmentTree(encoder, rootNode, depth)
-	if err != nil {
-		return fmt.Errorf("error encoding assignment tree: %v", err)
-	}
-
-	return nil
-}
-
-func encodeAssignmentTree(encoder *json.Encoder, node *AssignmentNode, depth int) error {
-	if depth < 0 {
-		return nil
-	}
-
-	err := encoder.Encode(node)
-	if err != nil {
-		return fmt.Errorf("error encoding node %s: %v", node.Name, err)
-	}
-
-	for _, child := range node.children {
-		err = encodeAssignmentTree(encoder, child, depth-1)
-		if err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-func BuildTreeFromJSON(fileName string) (rootNode *AssignmentNode) {
-
 }
