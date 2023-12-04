@@ -271,19 +271,9 @@ func (m AssignmentLoaderModel) View() string {
 	return appStyle.Render(s)
 }
 
-func GetLoginCredientialsFromTUI(overwrite bool) {
-	// set the username and password to empty string
-	if overwrite {
-		cfg.SetUsernameInENV("")
-		cfg.SetPasswordInENV("")
-	}
-	// if the username and password are not set in the .env file, create the .env file
-	if !cfg.DoesENVFileExist() || cfg.IsENVFileEmpty() {
-		// run the TUI
-		p := tea.NewProgram(initialModel())
-		if err := p.Start(); err != nil {
-			fmt.Println("Oh no:", err)
-			return
-		}
+func SetEnvVarsFromTUI() {
+	p := tea.NewProgram(initialModel())
+	if _, err := p.Run(); err != nil {
+		fmt.Printf("could not start program: %s\n", err)
 	}
 }

@@ -27,19 +27,14 @@ func GetCsrfToken(doc *goquery.Document) (string, error) {
 // If the login fails, an error is returned along with the corresponding status code.
 func Login(client http.Client, route string, loginData url.Values) (http.Client, error) {
 	resp, err := client.PostForm(route, loginData)
-
 	if err != nil {
-		fmt.Println("Error logging in:", err)
 		return client, err
 	}
 	defer resp.Body.Close()
 
 	// Check if login was successful
 	if resp.StatusCode != http.StatusOK {
-		fmt.Printf("Login failed, status code = %d\n", resp.StatusCode)
 		return client, fmt.Errorf("Login failed, status code = %d\n", resp.StatusCode)
 	}
-	fmt.Println("Login successful")
-
 	return client, nil
 }

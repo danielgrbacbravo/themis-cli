@@ -2,10 +2,10 @@ package tree
 
 import (
 	"fmt"
-	"log"
 	"net/http"
 	"themis-cli/parser"
 
+	log "github.com/charmbracelet/log"
 )
 
 const (
@@ -22,16 +22,16 @@ type AssignmentNode struct {
 
 // AppendChild appends a child node to the parent node.
 // It sets the parent of the child node and adds the child node to the parent's list of children.
-func (n *AssignmentNode) AppendChild(c *AssignmentNode) {
-	log.Default().Println(fmt.Sprintf("Appending child %s to parent %s", c.Name, n.Name))
+func (n *AssignmentNode) AppendChild(c *AssignmentNode, logger *log.Logger) {
+	logger.Debug("Appending child", "child", c.Name, "parent", n.Name)
 	c.Parent = n
 	n.children = append(n.children, c)
 }
 
 // BuildAssignmentNode creates a new AssignmentNode with the specified parent, name, and URL.
 // It logs a message indicating the node being built and returns the created node.
-func BuildAssignmentNode(parent *AssignmentNode, name string, url string) *AssignmentNode {
-	log.Default().Println(fmt.Sprintf("Building node %s", name))
+func BuildAssignmentNode(parent *AssignmentNode, name string, url string, logger *log.Logger) *AssignmentNode {
+	logger.Debug("Building node", "name", name, "url", url)
 	node := &AssignmentNode{
 		Name:   name,
 		URL:    url,
@@ -42,12 +42,11 @@ func BuildAssignmentNode(parent *AssignmentNode, name string, url string) *Assig
 
 // BuildRootAssignmentNode creates a root assignment node with the given name and URL.
 // It calls the BuildAssignmentNode function with a nil parent node.
-func BuildRootAssignmentNode(name string, url string) *AssignmentNode {
-	return BuildAssignmentNode(nil, name, url)
+func BuildRootAssignmentNode(name string, url string, logger *log.Logger) *AssignmentNode {
+	return BuildAssignmentNode(nil, name, url, logger)
 }
 
-func PullAssignmentsFromThemisAndBuildTree(client *http.Client, URL string, rootNode *AssignmentNode, depth int) (*AssignmentNode, error) {
-
+func PullAssignmentsFromThemisAndBuildTree(client *http.Client, URL string, rootNode *AssignmentNode, depth int, logger *log.Logger) (*AssignmentNode, error) {
 	// get assignments on page
 	assignments, err := parser.GetAssignmentsOnPage(client, URL)
 	if err != nil {
@@ -56,13 +55,13 @@ func PullAssignmentsFromThemisAndBuildTree(client *http.Client, URL string, root
 
 	// build assignment nodes
 	for _, assignment := range assignments {
-		assignmentNode := BuildAssignmentNode(rootNode, assignment["name"], assignment["url"])
-		rootNode.AppendChild(assignmentNode)
+		assignmentNode := BuildAssignmentNode(rootNode, assignment["name"], assignment["url"], logger)
+		rootNode.AppendChild(assignmentNode, logger)
 
 		// build tree
 		if depth > 0 {
 			for _, child := range rootNode.children {
-				child, err = PullAssignmentsFromThemisAndBuildTree(client, child.URL, child, depth-1)
+				child, err = PullAssignmentsFromThemisAndBuildTree(client, child.URL, child, depth-1, logger)
 				if err != nil {
 					return nil, fmt.Errorf("error building tree: %v", err)
 				}

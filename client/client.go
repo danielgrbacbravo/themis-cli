@@ -13,21 +13,22 @@ import (
 
 // initializeClient initializes and returns an http.Client with a cookie jar.
 // The cookie jar is used to store and manage cookies for subsequent requests.
+
 // Returns:
 //   - http.Client: The initialized http.Client with the cookie jar.
-func InitializeClient() http.Client {
+func InitializeClient() (http.Client, error) {
 	// Initialize cookie jar
 	jar, err := cookiejar.New(nil)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	// Initialize client
-	client := http.Client{
+	if err == nil {
+		// no error create client
+		client := http.Client{
 		Jar: jar,
+	}		
+	return client, nil
+	} else { 
+	// error creating cookie jar
+	return http.Client{}, err
 	}
-
-	return client
 }
 
 // GetLoginPage sends a GET request to the specified baseURL + loginRoute and returns the parsed HTML document and any error encountered.
