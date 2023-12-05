@@ -79,12 +79,12 @@ func main() {
 	firstLoggedIn := client.GetFirstLoggedIn(&httpClient, baseURL)
 
 	logger.Info("UserData 🥸 :", "name", name, "email", email, "lastLoggedIn", lastLoggedIn, "firstLoggedIn", firstLoggedIn)
-
 	URL := "https://themis.housing.rug.nl/course/2023-2024/progfun/"
 	rootNode := tree.BuildRootAssignmentNode("root", URL, logger)
-	rootNode, err = tree.PullAssignmentsFromThemisAndBuildTree(&httpClient, URL, rootNode, 0, logger)
+	rootNode, err = tree.PullAssignmentsFromThemisAndBuildTree(&httpClient, URL, rootNode, 1, logger)
 	if err != nil {
 		log.Fatal(err)
 		return
 	}
+
 }

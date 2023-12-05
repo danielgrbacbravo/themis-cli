@@ -8,6 +8,7 @@ import (
 	log "github.com/charmbracelet/log"
 )
 
+
 const (
 	baseURL = "https://themis.housing.rug.nl"
 )
@@ -19,6 +20,11 @@ type AssignmentNode struct {
 	URL      string
 	children []*AssignmentNode
 }
+
+// Title returns the title of the node.
+func (n *AssignmentNode) Title() string       { return n.Name }
+func (n *AssignmentNode) Description() string { return n.URL }
+func (n *AssignmentNode) FilterValue() string { return n.Name }
 
 // AppendChild appends a child node to the parent node.
 // It sets the parent of the child node and adds the child node to the parent's list of children.
@@ -71,3 +77,5 @@ func PullAssignmentsFromThemisAndBuildTree(client *http.Client, URL string, root
 
 	return rootNode, nil
 }
+
+// build
