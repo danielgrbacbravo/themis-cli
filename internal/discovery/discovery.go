@@ -3,6 +3,7 @@ package discovery
 import (
 	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/PuerkitoBio/goquery"
@@ -11,6 +12,13 @@ import (
 
 type Service struct {
 	BaseURL string
+}
+
+type AssignmentEntry struct {
+	Name      string `json:"name"`
+	URL       string `json:"url"`
+	Depth     int    `json:"depth"`
+	ParentURL string `json:"parent_url,omitempty"`
 }
 
 type AssignmentNode struct {
@@ -72,6 +80,55 @@ func (s *Service) PullAssignmentsAndBuildTree(client *http.Client, pageURL strin
 	return rootNode, nil
 }
 
+func (s *Service) DiscoverAssignments(client *http.Client, rootURL string, maxDepth int) (string, []AssignmentEntry, error) {
+	if maxDepth < 0 {
+		return "", nil, fmt.Errorf("--discover-depth must be >= 0")
+	}
+
+	normalizedRootURL, err := s.normalizeURL(rootURL)
+	if err != nil {
+		return "", nil, err
+	}
+
+	entries := make([]AssignmentEntry, 0)
+	visited := make(map[string]bool)
+
+	var walk func(currentURL string, parentURL string, depth int) error
+	walk = func(currentURL string, parentURL string, depth int) error {
+		if depth >= maxDepth {
+			return nil
+		}
+		if visited[currentURL] {
+			return nil
+		}
+		visited[currentURL] = true
+
+		assignments, err := s.getAssignmentsOnPage(client, currentURL)
+		if err != nil {
+			return err
+		}
+
+		for _, assignment := range assignments {
+			entries = append(entries, AssignmentEntry{
+				Name:      assignment.Name,
+				URL:       assignment.URL,
+				Depth:     depth + 1,
+				ParentURL: currentURL,
+			})
+			if err := walk(assignment.URL, currentURL, depth+1); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+
+	if err := walk(normalizedRootURL, "", 0); err != nil {
+		return "", nil, fmt.Errorf("error discovering assignments: %w", err)
+	}
+
+	return normalizedRootURL, entries, nil
+}
+
 type assignmentRef struct {
 	Name string
 	URL  string
@@ -98,11 +155,58 @@ func (s *Service) getAssignmentsOnPage(client *http.Client, pageURL string) ([]a
 			return
 		}
 
+		absoluteURL, resolveErr := s.resolveURL(pageURL, href)
+		if resolveErr != nil {
+			return
+		}
+
 		assignments = append(assignments, assignmentRef{
 			Name: assignmentName,
-			URL:  s.BaseURL + href,
+			URL:  absoluteURL,
 		})
 	})
 
 	return assignments, nil
+}
+
+func (s *Service) normalizeURL(raw string) (string, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return "", fmt.Errorf("root URL is empty")
+	}
+
+	parsed, err := url.Parse(raw)
+	if err != nil {
+		return "", fmt.Errorf("invalid root URL: %w", err)
+	}
+	if parsed.IsAbs() {
+		return raw, nil
+	}
+
+	baseParsed, err := url.Parse(s.BaseURL)
+	if err != nil {
+		return "", fmt.Errorf("invalid service base URL: %w", err)
+	}
+	return baseParsed.ResolveReference(parsed).String(), nil
+}
+
+func (s *Service) resolveURL(currentURL string, href string) (string, error) {
+	href = strings.TrimSpace(href)
+	if href == "" {
+		return "", fmt.Errorf("empty href")
+	}
+
+	parsedHref, err := url.Parse(href)
+	if err != nil {
+		return "", fmt.Errorf("invalid href: %w", err)
+	}
+	if parsedHref.IsAbs() {
+		return parsedHref.String(), nil
+	}
+
+	baseParsed, err := url.Parse(currentURL)
+	if err != nil {
+		return "", fmt.Errorf("invalid current URL: %w", err)
+	}
+	return baseParsed.ResolveReference(parsedHref).String(), nil
 }
