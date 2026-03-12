@@ -4,20 +4,18 @@ package main
 
 import (
 	// local packages
+	"net/url"
 	"os"
+	"path/filepath"
 	"themis-cli/auth"
 	"themis-cli/client"
-	"themis-cli/config"
 	"themis-cli/tree"
 
 	log "github.com/charmbracelet/log"
 )
 
 const (
-	baseURL     = "https://themis.housing.rug.nl"
-	loginRoute  = "/log/in"
-	userDataUrl = "/user"
-	coursesUrl  = "/courses"
+	baseURL = "https://themis.housing.rug.nl"
 )
 
 func main() {
@@ -35,41 +33,28 @@ func main() {
 		logger.Debug("httpClient initialized 🔥 :", "objectinfo", httpClient)
 	}
 
-	// the goquery document represents the parsed HTML document of the login page (baseURL + loginRoute)
-	document, err := client.GetLoginPage(httpClient, baseURL, loginRoute)
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		logger.Fatal(err)
+		return
+	}
+	cookiePath := filepath.Join(homeDir, ".config", "themis", "cookie.txt")
+
+	cookies, err := auth.LoadCookiesFromFile(cookiePath)
 	if err != nil {
 		logger.Fatal(err)
 		return
 	} else {
-		logger.Debug("document initialized 🔥 :", "objectinfo", document)
+		logger.Debug("cookies loaded 🍪 :", "count", len(cookies))
 	}
 
-	// get csrfToken from login page
-	csrfToken, err := auth.GetCsrfToken(document)
+	parsedBaseURL, err := url.Parse(baseURL)
 	if err != nil {
 		logger.Fatal(err)
 		return
 	} else {
-		logger.Debug("csrfToken 🍪 :", "objectinfo", csrfToken)
-	}
-
-	// generate loginData from ENV variables and csrfToken
-	// loginData is a url.Values object that contains the login data for the Themis login form
-	loginData, err := config.GenerateLoginURLValuesFromENV(csrfToken)
-	if err != nil {
-		logger.Fatal(err)
-		return
-	} else {
-		logger.Debug("LoginData 🔒 :", "user", loginData.Get("user"), "password", loginData.Get("password"))
-	}
-
-	// login to Themis and get the authenticated http.Client
-	httpClient, err = auth.Login(httpClient, baseURL+loginRoute, loginData)
-	if err != nil {
-		logger.Fatal(err)
-		return
-	} else {
-		logger.Debug("httpClient authenticated 😎 :", "objectinfo", httpClient)
+		httpClient.Jar.SetCookies(parsedBaseURL, cookies)
+		logger.Debug("httpClient authenticated via cookie file 😎 :", "cookiePath", cookiePath)
 	}
 	// get user data
 
@@ -79,7 +64,7 @@ func main() {
 	firstLoggedIn := client.GetFirstLoggedIn(&httpClient, baseURL)
 
 	logger.Info("UserData 🥸 :", "name", name, "email", email, "lastLoggedIn", lastLoggedIn, "firstLoggedIn", firstLoggedIn)
-	URL := "https://themis.housing.rug.nl/course/2023-2024/progfun/"
+	URL := "https://themis.housing.rug.nl/course/2025-2026/os/practicals/"
 	rootNode := tree.BuildRootAssignmentNode("root", URL, logger)
 	rootNode, err = tree.PullAssignmentsFromThemisAndBuildTree(&httpClient, URL, rootNode, 1, logger)
 	if err != nil {

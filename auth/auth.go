@@ -4,37 +4,45 @@ import (
 	// system packages
 	"fmt"
 	"net/http"
-	"net/url"
-
-	// third party packages
-	"github.com/PuerkitoBio/goquery"
+	"os"
+	"strings"
 )
 
-// getCsrfToken retrieves the CSRF token from the provided goquery.Document.
-// It searches for an input element with the name '_csrf' and returns its value.
-// If the CSRF token is not found, it returns an error.
-func GetCsrfToken(doc *goquery.Document) (string, error) {
-	csrfToken, exists := doc.Find("input[name='_csrf']").Attr("value")
-	if !exists {
-		return "", fmt.Errorf("CSRF token not found")
-	}
-	return csrfToken, nil
-}
-
-// Login performs a login operation using the provided http.Client, route, and loginData.
-// It sends a POST request to the specified route with the login data and returns the updated http.Client and an error, if any.
-// If the login is successful, the returned http.Client will be updated with the necessary authentication information.
-// If the login fails, an error is returned along with the corresponding status code.
-func Login(client http.Client, route string, loginData url.Values) (http.Client, error) {
-	resp, err := client.PostForm(route, loginData)
+// LoadCookiesFromFile reads a cookie header string from file and returns parsed HTTP cookies.
+// Expected format example: "name1=value1; name2=value2".
+func LoadCookiesFromFile(path string) ([]*http.Cookie, error) {
+	rawCookie, err := os.ReadFile(path)
 	if err != nil {
-		return client, err
+		return nil, err
 	}
-	defer resp.Body.Close()
+	cookieString := strings.TrimSpace(string(rawCookie))
+	if cookieString == "" {
+		return nil, fmt.Errorf("cookie file is empty: %s", path)
+	}
 
-	// Check if login was successful
-	if resp.StatusCode != http.StatusOK {
-		return client, fmt.Errorf("Login failed, status code = %d\n", resp.StatusCode)
+	cookiePairs := strings.Split(cookieString, ";")
+	cookies := make([]*http.Cookie, 0, len(cookiePairs))
+
+	for _, pair := range cookiePairs {
+		pair = strings.TrimSpace(pair)
+		if pair == "" {
+			continue
+		}
+
+		parts := strings.SplitN(pair, "=", 2)
+		if len(parts) != 2 || strings.TrimSpace(parts[0]) == "" {
+			return nil, fmt.Errorf("invalid cookie pair in %s: %q", path, pair)
+		}
+
+		cookies = append(cookies, &http.Cookie{
+			Name:  strings.TrimSpace(parts[0]),
+			Value: strings.TrimSpace(parts[1]),
+		})
 	}
-	return client, nil
+
+	if len(cookies) == 0 {
+		return nil, fmt.Errorf("no valid cookies found in %s", path)
+	}
+
+	return cookies, nil
 }

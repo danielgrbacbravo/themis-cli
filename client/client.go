@@ -22,34 +22,13 @@ func InitializeClient() (http.Client, error) {
 	if err == nil {
 		// no error create client
 		client := http.Client{
-		Jar: jar,
-	}		
-	return client, nil
-	} else { 
-	// error creating cookie jar
-	return http.Client{}, err
+			Jar: jar,
+		}
+		return client, nil
+	} else {
+		// error creating cookie jar
+		return http.Client{}, err
 	}
-}
-
-// GetLoginPage sends a GET request to the specified baseURL + loginRoute and returns the parsed HTML document and any error encountered.
-// It takes an http.Client, baseURL string, and loginRoute string as parameters.
-// The returned *goquery.Document represents the parsed HTML document.
-// If an error occurs during the request or parsing, it is returned as the second value.
-func GetLoginPage(client http.Client, baseURL string, loginRoute string) (*goquery.Document, error) {
-	resp, err := client.Get(baseURL + loginRoute)
-	if err != nil {
-		fmt.Println("Error fetching login page:", err)
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	// Parse HTML and get CSRF token
-	doc, err := goquery.NewDocumentFromReader(resp.Body)
-	if err != nil {
-		fmt.Println("Error parsing login page:", err)
-		return nil, err
-	}
-	return doc, nil
 }
 
 // GetDataFromUserPage sends a GET request to the specified baseURL + userDataUrl and returns the parsed HTML document and any error encountered.
@@ -88,42 +67,6 @@ func GetFullName(client *http.Client, baseURL string) string {
 		userData[strings.TrimSpace(key)] = strings.TrimSpace(value)
 	})
 	return userData["Full name:"]
-}
-
-// It iterates over the sections, finds the key-value pairs, and stores them in a map.
-// The last name is then retrieved from the map and returned as a string.
-func getLastName(client *http.Client, baseURL string) string {
-	const userDataUrl = "/user"
-	doc, err := GetDataFromUserPage(client, baseURL, userDataUrl)
-	if err != nil {
-		log.Fatal(err)
-	}
-	userData := make(map[string]string)
-	doc.Find("section.border.accent div.cfg-container div.cfg-line").Each(func(i int, s *goquery.Selection) {
-		key := s.Find("span.cfg-key").Text()
-		value := s.Find("span.cfg-val").Text()
-		userData[strings.TrimSpace(key)] = strings.TrimSpace(value)
-	})
-	return userData["Last name:"]
-}
-
-// getInital retrieves the value of the "Initial" key from the provided goquery.Document.
-// It parses the document and extracts key-value pairs from specific sections and returns the value associated with the "Initial" key.
-// The extracted key-value pairs are stored in a map[string]string called userData.
-// The function returns an empty string if the "Initial" key is not found in the document.
-func getInital(client *http.Client, baseURL string) string {
-	const userDataUrl = "/user"
-	doc, err := GetDataFromUserPage(client, baseURL, userDataUrl)
-	if err != nil {
-		log.Fatal(err)
-	}
-	userData := make(map[string]string)
-	doc.Find("section.border.accent div.cfg-container div.cfg-line").Each(func(i int, s *goquery.Selection) {
-		key := s.Find("span.cfg-key").Text()
-		value := s.Find("span.cfg-val").Text()
-		userData[strings.TrimSpace(key)] = strings.TrimSpace(value)
-	})
-	return userData["Initials:"]
 }
 
 // getEmail extracts the email from the given goquery.Document.
