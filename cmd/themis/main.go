@@ -13,6 +13,7 @@ import (
 	"themis-cli/internal/projectlink"
 	"themis-cli/internal/state"
 	"themis-cli/internal/themis"
+	tuiapp "themis-cli/internal/tui/app"
 	"time"
 )
 
@@ -58,6 +59,8 @@ func main() {
 		runFetch(os.Args[2:])
 	case "project":
 		runProject(os.Args[2:])
+	case "tui":
+		runTUI(os.Args[2:])
 	case "-h", "--help", "help":
 		printUsage()
 	default:
@@ -563,6 +566,45 @@ func runProjectLink(args []string) {
 	fmt.Printf("Saved project config at %s\n", cfgPath)
 }
 
+func runTUI(args []string) {
+	jsonRequested := wantsJSON(args)
+	fs := newFlagSet("tui")
+	rootURL := fs.String("root-url", "", "Optional root URL to focus in TUI")
+	if err := fs.Parse(args); err != nil {
+		fail(err, jsonRequested, "")
+	}
+	if jsonRequested {
+		fail(fmt.Errorf("--json is not supported for interactive tui"), false, "")
+	}
+
+	statePath, err := state.DefaultStatePath()
+	if err != nil {
+		fail(err, false, "")
+	}
+	st, err := state.Load(statePath)
+	if err != nil {
+		fail(err, false, "")
+	}
+
+	rootNodeID := ""
+	if strings.TrimSpace(*rootURL) != "" {
+		id, _, err := state.NodeIDFromURL(strings.TrimSpace(*rootURL))
+		if err != nil {
+			fail(err, false, "")
+		}
+		rootNodeID = id
+	} else if cfg, _, err := projectlink.ResolveByCWD("."); err == nil {
+		rootNodeID = strings.TrimSpace(cfg.LinkedRootNodeID)
+		if rootNodeID == "" {
+			rootNodeID = state.NodeIDFromCanonicalURL(cfg.LinkedRootURL)
+		}
+	}
+
+	if err := tuiapp.Run(st, rootNodeID); err != nil {
+		fail(err, false, "")
+	}
+}
+
 func findRepoRoot(start string) (string, error) {
 	cur, err := filepath.Abs(start)
 	if err != nil {
@@ -618,6 +660,7 @@ func printUsage() {
 	fmt.Println("  list   List available test case indices")
 	fmt.Println("  fetch  Download available test cases")
 	fmt.Println("  project Manage repository link metadata")
+	fmt.Println("  tui    Browse cached hierarchy (read-only, no network)")
 	fmt.Println()
 	fmt.Println("Common flags (all subcommands):")
 	fmt.Println("  --base-url <url>")
@@ -630,6 +673,7 @@ func printUsage() {
 	fmt.Println("  list  --discover [--root-url <url>] [--discover-depth <n>] [--refresh-url <url>] [--refresh-depth <n>] [--full-refresh] [--from-state-only]")
 	fmt.Println("  fetch --tests-url <url> [--out <dir>]")
 	fmt.Println("  project link --root-url <url> [--default-refresh-depth <n>]")
+	fmt.Println("  tui [--root-url <url>]")
 }
 
 func fail(err error, asJSON bool, baseURL string) {
