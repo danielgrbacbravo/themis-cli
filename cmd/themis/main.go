@@ -569,6 +569,7 @@ func runProjectLink(args []string) {
 func runTUI(args []string) {
 	jsonRequested := wantsJSON(args)
 	fs := newFlagSet("tui")
+	common := addCommonFlags(fs)
 	rootURL := fs.String("root-url", "", "Optional root URL to focus in TUI")
 	if err := fs.Parse(args); err != nil {
 		fail(err, jsonRequested, "")
@@ -593,14 +594,90 @@ func runTUI(args []string) {
 			fail(err, false, "")
 		}
 		rootNodeID = id
-	} else if cfg, _, err := projectlink.ResolveByCWD("."); err == nil {
-		rootNodeID = strings.TrimSpace(cfg.LinkedRootNodeID)
+	}
+
+	linkedRootNodeID := ""
+	subtreeRefreshDepth := 1
+	if cfg, _, err := projectlink.ResolveByCWD("."); err == nil {
+		projectRootID := strings.TrimSpace(cfg.LinkedRootNodeID)
+		if projectRootID == "" {
+			projectRootID = state.NodeIDFromCanonicalURL(cfg.LinkedRootURL)
+		}
 		if rootNodeID == "" {
-			rootNodeID = state.NodeIDFromCanonicalURL(cfg.LinkedRootURL)
+			rootNodeID = projectRootID
+		}
+		linkedRootNodeID = projectRootID
+		if cfg.Preferences.DefaultRefreshDepth > 0 {
+			subtreeRefreshDepth = cfg.Preferences.DefaultRefreshDepth
 		}
 	}
 
-	if err := tuiapp.Run(st, rootNodeID); err != nil {
+	refreshExec := func(current state.State, req tuiapp.RefreshRequest) tuiapp.RefreshOutcome {
+		start := time.Now()
+		out := tuiapp.RefreshOutcome{
+			State:        current,
+			Scope:        req.Scope,
+			TargetNodeID: req.TargetNodeID,
+		}
+
+		baseURL, err := themis.NormalizeBaseURL(common.baseURL)
+		if err != nil {
+			out.Err = err
+			return out
+		}
+		session, err := themis.NewSessionWithAuthConfig(baseURL, themis.AuthConfig{
+			CookieFile:        common.cookieFile,
+			CookieEnv:         common.cookieEnv,
+			DefaultCookiePath: common.defaultCookiePath,
+		})
+		if err != nil {
+			out.Err = err
+			return out
+		}
+		if _, err := session.ValidateAuthentication(); err != nil {
+			out.Err = err
+			return out
+		}
+
+		service := discovery.NewService(session.BaseURL)
+		var result discovery.RefreshResult
+		switch req.Scope {
+		case tuiapp.RefreshScopeNode:
+			result, err = service.RefreshNode(session.Client, &current, req.TargetURL, 0)
+		case tuiapp.RefreshScopeSubtree:
+			result, err = service.RefreshNode(session.Client, &current, req.TargetURL, req.Depth)
+		case tuiapp.RefreshScopeFull:
+			result, err = service.RefreshCatalog(session.Client, &current, req.Depth)
+		default:
+			err = fmt.Errorf("unsupported refresh scope: %s", req.Scope)
+		}
+		if err != nil {
+			out.Err = err
+			out.DurationMs = time.Since(start).Milliseconds()
+			return out
+		}
+		if len(result.Errors) > 0 {
+			out.Warnings = append(out.Warnings, result.Errors...)
+		}
+
+		if err := state.SaveAtomic(statePath, current, true); err != nil {
+			out.Err = err
+			out.DurationMs = time.Since(start).Milliseconds()
+			return out
+		}
+		out.State = current
+		out.UpdatedNodes = result.UpdatedNodes
+		out.DurationMs = time.Since(start).Milliseconds()
+		return out
+	}
+
+	if err := tuiapp.Run(tuiapp.Config{
+		State:               st,
+		RootNodeID:          rootNodeID,
+		LinkedRootNodeID:    linkedRootNodeID,
+		SubtreeRefreshDepth: subtreeRefreshDepth,
+		RefreshExecutor:     refreshExec,
+	}); err != nil {
 		fail(err, false, "")
 	}
 }
@@ -660,7 +737,7 @@ func printUsage() {
 	fmt.Println("  list   List available test case indices")
 	fmt.Println("  fetch  Download available test cases")
 	fmt.Println("  project Manage repository link metadata")
-	fmt.Println("  tui    Browse cached hierarchy (read-only, no network)")
+	fmt.Println("  tui    Browse cached hierarchy and trigger targeted refresh actions")
 	fmt.Println()
 	fmt.Println("Common flags (all subcommands):")
 	fmt.Println("  --base-url <url>")

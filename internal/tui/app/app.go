@@ -8,8 +8,16 @@ import (
 	"themis-cli/internal/state"
 )
 
-func Run(st state.State, rootNodeID string) error {
-	model, err := NewModel(st, rootNodeID)
+type Config struct {
+	State               state.State
+	RootNodeID          string
+	LinkedRootNodeID    string
+	SubtreeRefreshDepth int
+	RefreshExecutor     RefreshExecutor
+}
+
+func Run(cfg Config) error {
+	model, err := NewModel(cfg)
 	if err != nil {
 		return err
 	}
