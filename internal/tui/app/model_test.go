@@ -19,7 +19,11 @@ func baseStateForTUI(now time.Time) state.State {
 			Kind:         "course",
 			CanonicalURL: "https://themis.housing.rug.nl/course/2025-2026/os",
 			ChildIDs:     []string{"url:lab1", "url:lab2"},
-			Status:       state.StatusOK,
+			Assets: []state.AssetRef{
+				{Name: "1.in", URL: "https://themis.housing.rug.nl/file/course/%40tests/1.in", Kind: "file"},
+				{Name: "1.out", URL: "https://themis.housing.rug.nl/file/course/%40tests/1.out", Kind: "file"},
+			},
+			Status: state.StatusOK,
 			LastSuccessAt: func() *time.Time {
 				t := now
 				return &t
@@ -157,7 +161,62 @@ func TestRefreshFailureStatus(t *testing.T) {
 	msg := cmd()
 	updated, _ = m.Update(msg)
 	m = updated.(Model)
-	if m.statusText == "" || m.statusText == "Cached view (no network)" {
+	if m.statusText == "" || m.statusText == "Cached view (refresh actions enabled)" {
 		t.Fatalf("expected failure status text")
+	}
+}
+
+func TestDownloadFlow(t *testing.T) {
+	now := time.Date(2026, 3, 17, 12, 0, 0, 0, time.UTC)
+	exec := func(st state.State, req DownloadRequest) DownloadOutcome {
+		return DownloadOutcome{
+			NodeID:     req.NodeID,
+			TargetDir:  req.TargetDir,
+			Downloaded: len(req.Assets),
+			DurationMs: 9,
+			Files: []DownloadedFile{
+				{Name: "1.in", URL: "https://themis.housing.rug.nl/file/course/%40tests/1.in", Path: "/tmp/tests/1.in"},
+			},
+		}
+	}
+
+	persisted := false
+	persist := func(nodeID string, urls []string, targetDir string) error {
+		persisted = true
+		if nodeID != "url:root" || targetDir == "" || len(urls) == 0 {
+			t.Fatalf("unexpected persist payload")
+		}
+		return nil
+	}
+
+	m, err := NewModel(Config{
+		State:              baseStateForTUI(now),
+		DownloadExecutor:   exec,
+		DefaultDownloadDir: "/tmp/tests",
+		PersistChoices:     persist,
+	})
+	if err != nil {
+		t.Fatalf("new model failed: %v", err)
+	}
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'d'}})
+	m = updated.(Model)
+	if m.mode != "download" {
+		t.Fatalf("expected download mode")
+	}
+
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = updated.(Model)
+	if cmd == nil {
+		t.Fatalf("expected download command")
+	}
+	msg := cmd()
+	updated, _ = m.Update(msg)
+	m = updated.(Model)
+	if m.mode != "browse" {
+		t.Fatalf("expected browse mode after download")
+	}
+	if !persisted {
+		t.Fatalf("expected persisted choices callback")
 	}
 }

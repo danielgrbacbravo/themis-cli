@@ -598,7 +598,10 @@ func runTUI(args []string) {
 
 	linkedRootNodeID := ""
 	subtreeRefreshDepth := 1
-	if cfg, _, err := projectlink.ResolveByCWD("."); err == nil {
+	downloadDir := "."
+	recentChoices := map[string][]string{}
+	var persistChoices tuiapp.PersistChoicesFunc
+	if cfg, cfgPath, err := projectlink.ResolveByCWD("."); err == nil {
 		projectRootID := strings.TrimSpace(cfg.LinkedRootNodeID)
 		if projectRootID == "" {
 			projectRootID = state.NodeIDFromCanonicalURL(cfg.LinkedRootURL)
@@ -609,6 +612,24 @@ func runTUI(args []string) {
 		linkedRootNodeID = projectRootID
 		if cfg.Preferences.DefaultRefreshDepth > 0 {
 			subtreeRefreshDepth = cfg.Preferences.DefaultRefreshDepth
+		}
+		if strings.TrimSpace(cfg.LastDownloadDir) != "" {
+			downloadDir = cfg.LastDownloadDir
+		}
+		for nodeID, urls := range cfg.RecentAssetChoices {
+			recentChoices[nodeID] = append([]string(nil), urls...)
+		}
+		persistChoices = func(nodeID string, assetURLs []string, targetDir string) error {
+			latest, err := projectlink.Load(cfgPath)
+			if err != nil {
+				return err
+			}
+			if latest.RecentAssetChoices == nil {
+				latest.RecentAssetChoices = map[string][]string{}
+			}
+			latest.RecentAssetChoices[nodeID] = append([]string(nil), assetURLs...)
+			latest.LastDownloadDir = targetDir
+			return projectlink.Save(cfgPath, latest)
 		}
 	}
 
@@ -671,12 +692,61 @@ func runTUI(args []string) {
 		return out
 	}
 
+	downloadExec := func(current state.State, req tuiapp.DownloadRequest) tuiapp.DownloadOutcome {
+		start := time.Now()
+		out := tuiapp.DownloadOutcome{
+			NodeID:    req.NodeID,
+			TargetDir: req.TargetDir,
+		}
+
+		baseURL, err := themis.NormalizeBaseURL(common.baseURL)
+		if err != nil {
+			out.Err = err
+			return out
+		}
+		session, err := themis.NewSessionWithAuthConfig(baseURL, themis.AuthConfig{
+			CookieFile:        common.cookieFile,
+			CookieEnv:         common.cookieEnv,
+			DefaultCookiePath: common.defaultCookiePath,
+		})
+		if err != nil {
+			out.Err = err
+			return out
+		}
+		if _, err := session.ValidateAuthentication(); err != nil {
+			out.Err = err
+			return out
+		}
+
+		items, err := discovery.DownloadAssetRefs(session.Client, req.Assets, req.TargetDir)
+		out.DurationMs = time.Since(start).Milliseconds()
+		if err != nil {
+			out.Err = err
+			return out
+		}
+		files := make([]tuiapp.DownloadedFile, 0, len(items))
+		for _, item := range items {
+			files = append(files, tuiapp.DownloadedFile{
+				Name: item.Name,
+				URL:  item.URL,
+				Path: item.Path,
+			})
+		}
+		out.Downloaded = len(files)
+		out.Files = files
+		return out
+	}
+
 	if err := tuiapp.Run(tuiapp.Config{
 		State:               st,
 		RootNodeID:          rootNodeID,
 		LinkedRootNodeID:    linkedRootNodeID,
 		SubtreeRefreshDepth: subtreeRefreshDepth,
 		RefreshExecutor:     refreshExec,
+		DownloadExecutor:    downloadExec,
+		DefaultDownloadDir:  downloadDir,
+		RecentAssetChoices:  recentChoices,
+		PersistChoices:      persistChoices,
 	}); err != nil {
 		fail(err, false, "")
 	}

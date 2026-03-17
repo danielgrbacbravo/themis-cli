@@ -11,13 +11,15 @@ type Preferences struct {
 }
 
 type Config struct {
-	SchemaVersion    int         `json:"schema_version"`
-	BaseURL          string      `json:"base_url"`
-	LinkedRootURL    string      `json:"linked_root_url"`
-	LinkedRootNodeID string      `json:"linked_root_node_id,omitempty"`
-	LastOpenNodeID   string      `json:"last_open_node_id,omitempty"`
-	Preferences      Preferences `json:"preferences"`
-	UpdatedAt        time.Time   `json:"updated_at"`
+	SchemaVersion      int                 `json:"schema_version"`
+	BaseURL            string              `json:"base_url"`
+	LinkedRootURL      string              `json:"linked_root_url"`
+	LinkedRootNodeID   string              `json:"linked_root_node_id,omitempty"`
+	LastOpenNodeID     string              `json:"last_open_node_id,omitempty"`
+	LastDownloadDir    string              `json:"last_download_dir,omitempty"`
+	RecentAssetChoices map[string][]string `json:"recent_asset_choices,omitempty"`
+	Preferences        Preferences         `json:"preferences"`
+	UpdatedAt          time.Time           `json:"updated_at"`
 }
 
 func DefaultPreferences() Preferences {

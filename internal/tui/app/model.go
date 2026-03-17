@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -39,8 +40,36 @@ type RefreshOutcome struct {
 
 type RefreshExecutor func(st state.State, req RefreshRequest) RefreshOutcome
 
+type DownloadRequest struct {
+	NodeID    string
+	TargetDir string
+	Assets    []state.AssetRef
+}
+
+type DownloadedFile struct {
+	Name string
+	URL  string
+	Path string
+}
+
+type DownloadOutcome struct {
+	NodeID     string
+	TargetDir  string
+	Downloaded int
+	Files      []DownloadedFile
+	DurationMs int64
+	Err        error
+}
+
+type DownloadExecutor func(st state.State, req DownloadRequest) DownloadOutcome
+type PersistChoicesFunc func(nodeID string, assetURLs []string, targetDir string) error
+
 type refreshFinishedMsg struct {
 	Outcome RefreshOutcome
+}
+
+type downloadFinishedMsg struct {
+	Outcome DownloadOutcome
 }
 
 type Model struct {
@@ -49,6 +78,13 @@ type Model struct {
 	linkedRootNodeID    string
 	subtreeRefreshDepth int
 	refreshExecutor     RefreshExecutor
+	downloadExecutor    DownloadExecutor
+	persistChoices      PersistChoicesFunc
+	defaultDownloadDir  string
+	recentAssetChoices  map[string][]string
+	downloadSelection   map[string]bool
+	downloadCursor      int
+	downloadInFlight    bool
 	refreshInFlight     bool
 	expanded            map[string]bool
 	flat                []treeRow
@@ -103,13 +139,18 @@ func NewModel(cfg Config) (Model, error) {
 		linkedRootNodeID:    strings.TrimSpace(cfg.LinkedRootNodeID),
 		subtreeRefreshDepth: depth,
 		refreshExecutor:     cfg.RefreshExecutor,
+		downloadExecutor:    cfg.DownloadExecutor,
+		persistChoices:      cfg.PersistChoices,
+		defaultDownloadDir:  strings.TrimSpace(cfg.DefaultDownloadDir),
+		recentAssetChoices:  cloneChoiceMap(cfg.RecentAssetChoices),
+		downloadSelection:   map[string]bool{},
 		expanded: map[string]bool{
 			resolvedRootID: true,
 		},
 		selectedNodeID: resolvedRootID,
 		selectedIndex:  0,
-		width:          120,
-		height:         30,
+		width:          0,
+		height:         0,
 		mode:           "browse",
 		filter:         "",
 		statusText:     "Cached view (refresh actions enabled)",
@@ -143,23 +184,60 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.statusText += fmt.Sprintf(" warnings=%d", len(out.Warnings))
 		}
 		return m, nil
+	case downloadFinishedMsg:
+		m.downloadInFlight = false
+		m.mode = "browse"
+		out := msg.Outcome
+		if out.Err != nil {
+			m.statusText = fmt.Sprintf("download failed: %v", out.Err)
+			return m, nil
+		}
+		if m.persistChoices != nil {
+			selected := m.selectedAssetURLs()
+			if err := m.persistChoices(out.NodeID, selected, out.TargetDir); err != nil {
+				m.statusText = fmt.Sprintf("download finished (%d files), persist failed: %v", out.Downloaded, err)
+				return m, nil
+			}
+			m.recentAssetChoices[out.NodeID] = selected
+		}
+		m.defaultDownloadDir = out.TargetDir
+		m.statusText = fmt.Sprintf("download finished: %d files to %s in %dms", out.Downloaded, out.TargetDir, out.DurationMs)
+		return m, nil
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "ctrl+c", "q":
 			return m, tea.Quit
 		case "up", "k":
+			if m.mode == "download" {
+				if m.downloadCursor > 0 {
+					m.downloadCursor--
+				}
+				return m, nil
+			}
 			if m.selectedIndex > 0 {
 				m.selectedIndex--
 				m.syncSelectedNodeID()
 			}
 		case "down", "j":
+			if m.mode == "download" {
+				assets := m.selectedNodeAssets()
+				if m.downloadCursor < len(assets)-1 {
+					m.downloadCursor++
+				}
+				return m, nil
+			}
 			if m.selectedIndex < len(m.flat)-1 {
 				m.selectedIndex++
 				m.syncSelectedNodeID()
 			}
 		case "left", "h":
+			if m.mode == "download" {
+				m.mode = "browse"
+				m.statusText = "download mode closed"
+				return m, nil
+			}
 			m.collapseOrMoveToParent()
-		case "right", "l", "enter":
+		case "right", "l":
 			m.expandSelection()
 		case "g":
 			m.selectedIndex = 0
@@ -182,12 +260,41 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.syncSelectedIndex()
 			m.statusText = "jumped to linked project root"
 			return m, nil
+		case "d":
+			if m.mode == "download" {
+				m.mode = "browse"
+				m.statusText = "download mode closed"
+				return m, nil
+			}
+			return m.openDownloadMode()
+		case " ":
+			if m.mode == "download" {
+				m.toggleDownloadSelectionAtCursor()
+				return m, nil
+			}
+		case "a":
+			if m.mode == "download" {
+				for _, asset := range m.selectedNodeAssets() {
+					m.downloadSelection[asset.URL] = true
+				}
+				return m, nil
+			}
+		case "c":
+			if m.mode == "download" {
+				m.downloadSelection = map[string]bool{}
+				return m, nil
+			}
 		case "r":
 			return m.startRefresh(RefreshScopeNode, 0)
 		case "R":
 			return m.startRefresh(RefreshScopeSubtree, m.subtreeRefreshDepth)
 		case "f":
 			return m.startRefresh(RefreshScopeFull, m.subtreeRefreshDepth)
+		case "enter":
+			if m.mode == "download" {
+				return m.startDownload()
+			}
+			m.expandSelection()
 		}
 	}
 	return m, nil
@@ -197,19 +304,37 @@ func (m Model) View() string {
 	if len(m.flat) == 0 {
 		return "No nodes to display"
 	}
-
-	treeWidth := m.width / 2
-	if treeWidth < 32 {
-		treeWidth = 32
-	}
-	detailsWidth := m.width - treeWidth - 1
-	if detailsWidth < 30 {
-		detailsWidth = 30
+	if m.width <= 0 || m.height <= 0 {
+		return "Loading UI..."
 	}
 
-	treePane := lipgloss.NewStyle().Width(treeWidth).Height(maxInt(1, m.height-2)).Border(lipgloss.RoundedBorder()).Render(m.renderTree())
-	detailsPane := lipgloss.NewStyle().Width(detailsWidth).Height(maxInt(1, m.height-2)).Border(lipgloss.RoundedBorder()).Render(m.renderDetails())
-	statusPane := lipgloss.NewStyle().Width(m.width).Border(lipgloss.RoundedBorder()).Render(m.renderStatus())
+	availableWidth := maxInt(20, m.width)
+	availableHeight := maxInt(6, m.height)
+
+	statusStyle := lipgloss.NewStyle().Border(lipgloss.RoundedBorder())
+	statusFrameW, statusFrameH := statusStyle.GetFrameSize()
+	statusContentWidth := maxInt(1, availableWidth-statusFrameW)
+	statusPane := statusStyle.Width(statusContentWidth).Render(truncateOneLine(m.renderStatus(), statusContentWidth))
+	statusTotalHeight := lipgloss.Height(statusPane)
+	if statusTotalHeight < statusFrameH+1 {
+		statusTotalHeight = statusFrameH + 1
+	}
+
+	topHeight := availableHeight - statusTotalHeight
+	if topHeight < 3 {
+		topHeight = 3
+	}
+
+	panelStyle := lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).Align(lipgloss.Left, lipgloss.Top)
+	panelFrameW, panelFrameH := panelStyle.GetFrameSize()
+	leftOuterWidth := maxInt(10, availableWidth/2)
+	rightOuterWidth := maxInt(10, availableWidth-leftOuterWidth)
+	leftContentWidth := maxInt(1, leftOuterWidth-panelFrameW)
+	rightContentWidth := maxInt(1, rightOuterWidth-panelFrameW)
+	panelContentHeight := maxInt(1, topHeight-panelFrameH)
+
+	treePane := panelStyle.Width(leftContentWidth).Height(panelContentHeight).Render(clipTopLines(m.renderTree(), panelContentHeight))
+	detailsPane := panelStyle.Width(rightContentWidth).Height(panelContentHeight).Render(clipTopLines(m.renderDetails(), panelContentHeight))
 
 	top := lipgloss.JoinHorizontal(lipgloss.Top, treePane, detailsPane)
 	return lipgloss.JoinVertical(lipgloss.Left, top, statusPane)
@@ -256,6 +381,124 @@ func (m Model) startRefresh(scope RefreshScope, depth int) (tea.Model, tea.Cmd) 
 		return refreshFinishedMsg{Outcome: out}
 	}
 	return m, cmd
+}
+
+func (m Model) openDownloadMode() (tea.Model, tea.Cmd) {
+	if m.downloadInFlight {
+		m.statusText = "download already in progress"
+		return m, nil
+	}
+	assets := m.selectedNodeAssets()
+	if len(assets) == 0 {
+		m.statusText = "selected node has no assets"
+		return m, nil
+	}
+	m.mode = "download"
+	m.downloadCursor = 0
+	m.downloadSelection = map[string]bool{}
+
+	if recent, ok := m.recentAssetChoices[m.selectedNodeID]; ok && len(recent) > 0 {
+		for _, url := range recent {
+			m.downloadSelection[url] = true
+		}
+	} else {
+		for _, asset := range assets {
+			m.downloadSelection[asset.URL] = true
+		}
+	}
+
+	m.statusText = fmt.Sprintf("download mode: %d assets selected", len(m.selectedAssetURLs()))
+	return m, nil
+}
+
+func (m *Model) toggleDownloadSelectionAtCursor() {
+	assets := m.selectedNodeAssets()
+	if len(assets) == 0 {
+		return
+	}
+	if m.downloadCursor < 0 {
+		m.downloadCursor = 0
+	}
+	if m.downloadCursor >= len(assets) {
+		m.downloadCursor = len(assets) - 1
+	}
+	asset := assets[m.downloadCursor]
+	if m.downloadSelection[asset.URL] {
+		delete(m.downloadSelection, asset.URL)
+	} else {
+		m.downloadSelection[asset.URL] = true
+	}
+}
+
+func (m Model) startDownload() (tea.Model, tea.Cmd) {
+	if m.downloadInFlight {
+		m.statusText = "download already in progress"
+		return m, nil
+	}
+	if m.downloadExecutor == nil {
+		m.statusText = "download unavailable"
+		return m, nil
+	}
+	node := m.selectedNode()
+	if node == nil {
+		m.statusText = "no selected node"
+		return m, nil
+	}
+
+	selected := m.selectedAssets()
+	if len(selected) == 0 {
+		m.statusText = "no assets selected"
+		return m, nil
+	}
+
+	targetDir := m.defaultDownloadDir
+	if strings.TrimSpace(targetDir) == "" {
+		targetDir = filepath.Join(".", "tests")
+	}
+
+	m.downloadInFlight = true
+	m.statusText = fmt.Sprintf("downloading %d assets to %s...", len(selected), targetDir)
+	stSnapshot := m.st
+	exec := m.downloadExecutor
+	req := DownloadRequest{
+		NodeID:    node.ID,
+		TargetDir: targetDir,
+		Assets:    selected,
+	}
+
+	cmd := func() tea.Msg {
+		out := exec(stSnapshot, req)
+		return downloadFinishedMsg{Outcome: out}
+	}
+	return m, cmd
+}
+
+func (m Model) selectedNodeAssets() []state.AssetRef {
+	node := m.selectedNode()
+	if node == nil {
+		return []state.AssetRef{}
+	}
+	return append([]state.AssetRef{}, node.Assets...)
+}
+
+func (m Model) selectedAssets() []state.AssetRef {
+	all := m.selectedNodeAssets()
+	out := make([]state.AssetRef, 0, len(all))
+	for _, asset := range all {
+		if m.downloadSelection[asset.URL] {
+			out = append(out, asset)
+		}
+	}
+	return out
+}
+
+func (m Model) selectedAssetURLs() []string {
+	selected := m.selectedAssets()
+	out := make([]string, 0, len(selected))
+	for _, asset := range selected {
+		out = append(out, asset.URL)
+	}
+	return out
 }
 
 func (m *Model) rebuildFlat() {
@@ -430,6 +673,9 @@ func (m Model) renderDetails() string {
 	if node == nil {
 		return "Details\n(no selection)"
 	}
+	if m.mode == "download" {
+		return m.renderDownloadPanel(*node)
+	}
 
 	lines := []string{
 		"Details",
@@ -469,7 +715,43 @@ func (m Model) renderStatus() string {
 	if m.refreshInFlight {
 		inFlight = "refreshing"
 	}
-	return fmt.Sprintf("Status | nodes:%d visible:%d selected:%s | mode:%s/%s | keys: up/down left/right enter r R f p g G q | %s", len(m.st.Nodes), len(m.flat), selected, m.mode, inFlight, m.statusText)
+	if m.downloadInFlight {
+		inFlight = "downloading"
+	}
+	return fmt.Sprintf("Status | nodes:%d visible:%d selected:%s | mode:%s/%s | keys: up/down left/right enter r R f p d space a c g G q | %s", len(m.st.Nodes), len(m.flat), selected, m.mode, inFlight, m.statusText)
+}
+
+func (m Model) renderDownloadPanel(node state.Node) string {
+	assets := m.selectedNodeAssets()
+	lines := []string{
+		"Download",
+		fmt.Sprintf("Node: %s", displayTitle(node)),
+		fmt.Sprintf("Target dir: %s", m.defaultDownloadDir),
+		"Keys: up/down move, space toggle, a select-all, c clear, enter download, h/d close",
+		"",
+	}
+	if len(assets) == 0 {
+		lines = append(lines, "(no assets available)")
+		return strings.Join(lines, "\n")
+	}
+	for i, asset := range assets {
+		cursor := " "
+		if i == m.downloadCursor {
+			cursor = ">"
+		}
+		mark := " "
+		if m.downloadSelection[asset.URL] {
+			mark = "x"
+		}
+		name := strings.TrimSpace(asset.Name)
+		if name == "" {
+			name = asset.URL
+		}
+		lines = append(lines, fmt.Sprintf("%s [%s] %s (%s)", cursor, mark, name, asset.Kind))
+	}
+	lines = append(lines, "")
+	lines = append(lines, fmt.Sprintf("Selected: %d/%d", len(m.selectedAssetURLs()), len(assets)))
+	return strings.Join(lines, "\n")
 }
 
 func defaultRootNodeID(st state.State) string {
@@ -542,4 +824,38 @@ func maxInt(a int, b int) int {
 		return a
 	}
 	return b
+}
+
+func cloneChoiceMap(in map[string][]string) map[string][]string {
+	out := make(map[string][]string, len(in))
+	for k, v := range in {
+		out[k] = append([]string(nil), v...)
+	}
+	return out
+}
+
+func clipTopLines(content string, maxLines int) string {
+	if maxLines <= 0 {
+		return ""
+	}
+	lines := strings.Split(content, "\n")
+	if len(lines) <= maxLines {
+		return content
+	}
+	return strings.Join(lines[:maxLines], "\n")
+}
+
+func truncateOneLine(content string, maxWidth int) string {
+	line := strings.Split(content, "\n")[0]
+	if maxWidth <= 0 {
+		return ""
+	}
+	r := []rune(line)
+	if len(r) <= maxWidth {
+		return line
+	}
+	if maxWidth == 1 {
+		return "…"
+	}
+	return string(r[:maxWidth-1]) + "…"
 }

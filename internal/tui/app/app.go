@@ -14,6 +14,10 @@ type Config struct {
 	LinkedRootNodeID    string
 	SubtreeRefreshDepth int
 	RefreshExecutor     RefreshExecutor
+	DownloadExecutor    DownloadExecutor
+	DefaultDownloadDir  string
+	RecentAssetChoices  map[string][]string
+	PersistChoices      PersistChoicesFunc
 }
 
 func Run(cfg Config) error {
