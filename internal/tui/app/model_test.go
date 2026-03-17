@@ -212,11 +212,16 @@ func TestDownloadFlow(t *testing.T) {
 	if cmd == nil {
 		t.Fatalf("expected download command")
 	}
-	msg := cmd()
-	updated, _ = m.Update(msg)
-	m = updated.(Model)
-	if m.mode != "browse" {
-		t.Fatalf("expected browse mode after download")
+
+	for cmd != nil {
+		msg := cmd()
+		updated, next := m.Update(msg)
+		m = updated.(Model)
+		cmd = next
+	}
+
+	if m.mode != "download" {
+		t.Fatalf("expected download mode to remain for progress summary")
 	}
 	if !persisted {
 		t.Fatalf("expected persisted choices callback")
@@ -244,6 +249,7 @@ func TestDownloadViewportKeepsHeaderAndCursorVisible(t *testing.T) {
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'d'}})
 	m = updated.(Model)
 	m.downloadCursor = 39
+	m.adjustDownloadOffset()
 
 	view := m.renderDetailsForSize(48, 14)
 	if !strings.Contains(view, "Download") {
