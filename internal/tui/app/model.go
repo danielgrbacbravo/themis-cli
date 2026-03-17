@@ -679,30 +679,52 @@ func (m Model) renderDetails() string {
 
 	lines := []string{
 		"Details",
-		fmt.Sprintf("ID: %s", node.ID),
-		fmt.Sprintf("Title: %s", displayTitle(*node)),
-		fmt.Sprintf("Kind: %s", node.Kind),
-		fmt.Sprintf("Status: %s", node.Status),
-		fmt.Sprintf("URL: %s", node.CanonicalURL),
-		fmt.Sprintf("Nav API: %s", node.NavAPIURL),
-		fmt.Sprintf("Children: %d", len(node.ChildIDs)),
-		fmt.Sprintf("Assets: %d", len(node.Assets)),
+		fmt.Sprintf("Name: %s", displayTitle(*node)),
+		fmt.Sprintf("Type: %s", readableKind(node.Kind)),
+		fmt.Sprintf("Status: %s", strings.ToUpper(string(node.Status))),
 	}
+	if node.CanonicalURL != "" {
+		lines = append(lines, fmt.Sprintf("Path: %s", node.CanonicalURL))
+	}
+
+	lines = append(lines, "")
+	lines = append(lines, fmt.Sprintf("Children: %d", len(node.ChildIDs)))
+	lines = append(lines, fmt.Sprintf("Files: %d", len(node.Assets)))
+
 	if node.LastSuccessAt != nil {
-		lines = append(lines, fmt.Sprintf("Last success: %s", node.LastSuccessAt.Format(time.RFC3339)))
+		lines = append(lines, fmt.Sprintf("Fresh at: %s", node.LastSuccessAt.Local().Format("2006-01-02 15:04")))
 	}
-	if node.LastFetchedAt != nil {
-		lines = append(lines, fmt.Sprintf("Last fetched: %s", node.LastFetchedAt.Format(time.RFC3339)))
+	if node.LastFetchedAt != nil && node.LastSuccessAt != nil {
+		if node.LastFetchedAt.After(*node.LastSuccessAt) {
+			lines = append(lines, fmt.Sprintf("Last fetch: %s", node.LastFetchedAt.Local().Format("2006-01-02 15:04")))
+		}
 	}
 	if node.LastError != "" {
-		lines = append(lines, fmt.Sprintf("Last error: %s", node.LastError))
+		lines = append(lines, fmt.Sprintf("Error: %s", node.LastError))
 	}
-	if breadcrumb, ok := node.Details["breadcrumb"]; ok {
-		lines = append(lines, fmt.Sprintf("Breadcrumb: %v", breadcrumb))
+
+	if desc, ok := node.Details["description"].(string); ok && strings.TrimSpace(desc) != "" {
+		lines = append(lines, "")
+		lines = append(lines, "Summary:")
+		lines = append(lines, strings.TrimSpace(desc))
 	}
-	if links, ok := node.Details["links"]; ok {
-		lines = append(lines, fmt.Sprintf("Links: %v", links))
+
+	if breadcrumb := breadcrumbString(node.Details); breadcrumb != "" {
+		lines = append(lines, "")
+		lines = append(lines, fmt.Sprintf("Location: %s", breadcrumb))
 	}
+
+	if configLines := configSummaryLines(node.Details); len(configLines) > 0 {
+		lines = append(lines, "")
+		lines = append(lines, "Configuration:")
+		lines = append(lines, configLines...)
+	}
+
+	if statusPage := statusPageURL(node.Details); statusPage != "" {
+		lines = append(lines, "")
+		lines = append(lines, fmt.Sprintf("Status page: %s", statusPage))
+	}
+
 	return strings.Join(lines, "\n")
 }
 
@@ -840,6 +862,91 @@ func cloneChoiceMap(in map[string][]string) map[string][]string {
 		out[k] = append([]string(nil), v...)
 	}
 	return out
+}
+
+func readableKind(kind string) string {
+	switch strings.TrimSpace(strings.ToLower(kind)) {
+	case "catalog":
+		return "Catalog"
+	case "year":
+		return "Academic Year"
+	case "course":
+		return "Course"
+	case "assignment":
+		return "Assignment"
+	default:
+		if kind == "" {
+			return "Unknown"
+		}
+		k := strings.TrimSpace(kind)
+		if k == "" {
+			return "Unknown"
+		}
+		return strings.ToUpper(k[:1]) + k[1:]
+	}
+}
+
+func breadcrumbString(details map[string]any) string {
+	raw, ok := details["breadcrumb"]
+	if !ok {
+		return ""
+	}
+	switch v := raw.(type) {
+	case []string:
+		return strings.Join(v, " > ")
+	case []any:
+		parts := make([]string, 0, len(v))
+		for _, item := range v {
+			if s, ok := item.(string); ok && strings.TrimSpace(s) != "" {
+				parts = append(parts, strings.TrimSpace(s))
+			}
+		}
+		return strings.Join(parts, " > ")
+	default:
+		return ""
+	}
+}
+
+func configSummaryLines(details map[string]any) []string {
+	raw, ok := details["config"]
+	if !ok {
+		return nil
+	}
+	cfg, ok := raw.(map[string]any)
+	if !ok {
+		return nil
+	}
+	lines := make([]string, 0, 3)
+	if v, ok := cfg["leading_submission"]; ok {
+		lines = append(lines, fmt.Sprintf("- Leading submission: %v", v))
+	}
+	if v, ok := cfg["end_display"]; ok {
+		lines = append(lines, fmt.Sprintf("- Due: %v", v))
+	} else if v, ok := cfg["end_iso"]; ok {
+		lines = append(lines, fmt.Sprintf("- Due: %v", v))
+	}
+	if v, ok := cfg["sort"]; ok {
+		lines = append(lines, fmt.Sprintf("- Sorted: %v", v))
+	}
+	return lines
+}
+
+func statusPageURL(details map[string]any) string {
+	raw, ok := details["links"]
+	if !ok {
+		return ""
+	}
+	switch links := raw.(type) {
+	case map[string]string:
+		return strings.TrimSpace(links["status_page"])
+	case map[string]any:
+		if v, ok := links["status_page"]; ok {
+			if s, ok := v.(string); ok {
+				return strings.TrimSpace(s)
+			}
+		}
+	}
+	return ""
 }
 
 func clipTopLines(content string, maxLines int) string {
