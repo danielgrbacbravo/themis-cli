@@ -13,6 +13,16 @@ import (
 	"themis-cli/internal/state"
 )
 
+var (
+	titleStyle    = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.AdaptiveColor{Light: "33", Dark: "75"})
+	mutedStyle    = lipgloss.NewStyle().Foreground(lipgloss.AdaptiveColor{Light: "242", Dark: "245"})
+	okStyle       = lipgloss.NewStyle().Foreground(lipgloss.AdaptiveColor{Light: "28", Dark: "42"})
+	staleStyle    = lipgloss.NewStyle().Foreground(lipgloss.AdaptiveColor{Light: "136", Dark: "214"})
+	errorStyle    = lipgloss.NewStyle().Foreground(lipgloss.AdaptiveColor{Light: "160", Dark: "203"})
+	neverStyle    = lipgloss.NewStyle().Foreground(lipgloss.AdaptiveColor{Light: "240", Dark: "240"})
+	selectedStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.AdaptiveColor{Light: "39", Dark: "81"})
+)
+
 type RefreshScope string
 
 const (
@@ -683,7 +693,7 @@ func (m *Model) collapseOrMoveToParent() {
 
 func (m Model) renderTree() string {
 	lines := make([]string, 0, len(m.flat)+1)
-	lines = append(lines, "Tree")
+	lines = append(lines, titleStyle.Render("Tree"))
 	for i, row := range m.flat {
 		prefix := "  "
 		if i == m.selectedIndex {
@@ -698,7 +708,10 @@ func (m Model) renderTree() string {
 				expandGlyph = ">"
 			}
 		}
-		line := fmt.Sprintf("%s%s%s [%s] %s", prefix, indent, expandGlyph, row.Status, row.Title)
+		line := fmt.Sprintf("%s%s%s %s %s", prefix, indent, mutedStyle.Render(expandGlyph), colorStatusTag(row.Status), row.Title)
+		if i == m.selectedIndex {
+			line = selectedStyle.Render(line)
+		}
 		lines = append(lines, line)
 	}
 	return strings.Join(lines, "\n")
@@ -715,17 +728,17 @@ func (m Model) renderDetailsForSize(maxWidth int, maxLines int) string {
 func (m Model) renderDetails(maxWidth int, maxLines int) string {
 	node := m.selectedNode()
 	if node == nil {
-		return "Details\n(no selection)"
+		return titleStyle.Render("Details") + "\n" + mutedStyle.Render("(no selection)")
 	}
 	if m.mode == "download" {
 		return m.renderDownloadPanel(*node, maxWidth, maxLines)
 	}
 
 	lines := []string{
-		"Details",
+		titleStyle.Render("Details"),
 		fmt.Sprintf("Name: %s", displayTitle(*node)),
 		fmt.Sprintf("Type: %s", readableKind(node.Kind)),
-		fmt.Sprintf("Status: %s", strings.ToUpper(string(node.Status))),
+		fmt.Sprintf("Status: %s", colorStatusWord(node.Status)),
 	}
 	if node.CanonicalURL != "" {
 		lines = append(lines, fmt.Sprintf("Path: %s", node.CanonicalURL))
@@ -749,7 +762,7 @@ func (m Model) renderDetails(maxWidth int, maxLines int) string {
 
 	if desc, ok := node.Details["description"].(string); ok && strings.TrimSpace(desc) != "" {
 		lines = append(lines, "")
-		lines = append(lines, "Summary:")
+		lines = append(lines, titleStyle.Render("Summary:"))
 		lines = append(lines, strings.TrimSpace(desc))
 	}
 
@@ -760,7 +773,7 @@ func (m Model) renderDetails(maxWidth int, maxLines int) string {
 
 	if configLines := configSummaryLines(node.Details); len(configLines) > 0 {
 		lines = append(lines, "")
-		lines = append(lines, "Configuration:")
+		lines = append(lines, titleStyle.Render("Configuration:"))
 		lines = append(lines, configLines...)
 	}
 
@@ -792,19 +805,26 @@ func (m Model) renderStatus() string {
 		keys = "j/k move (live progress) h/d close q quit"
 	}
 	msg := strings.TrimSpace(m.statusText)
-	if msg != "" {
-		return fmt.Sprintf("%s | %s |  %s | %s | %s", strings.ToUpper(m.mode), inFlight, selected, keys, msg)
+	modeText := titleStyle.Render(strings.ToUpper(m.mode))
+	stateText := mutedStyle.Render(inFlight)
+	selectedText := selected
+	if selected != "none" {
+		selectedText = selectedStyle.Render(selected)
 	}
-	return fmt.Sprintf("%s | %s |  %s | %s", strings.ToUpper(m.mode), inFlight, selected, keys)
+	keysText := mutedStyle.Render(keys)
+	if msg != "" {
+		return fmt.Sprintf("%s | %s | %s | %s | %s", modeText, stateText, selectedText, keysText, msg)
+	}
+	return fmt.Sprintf("%s | %s | %s | %s", modeText, stateText, selectedText, keysText)
 }
 
 func (m Model) renderDownloadPanel(node state.Node, maxWidth int, maxLines int) string {
 	assets := m.selectedNodeAssets()
 	header := []string{
-		"Download",
+		titleStyle.Render("Download"),
 		fmt.Sprintf("Node: %s", displayTitle(node)),
 		fmt.Sprintf("Target dir: %s", m.defaultDownloadDir),
-		"Keys: j/k move, space toggle, a all, c clear, enter download",
+		mutedStyle.Render("Keys: j/k move, space toggle, a all, c clear, enter download"),
 		"",
 	}
 	for i := range header {
@@ -820,7 +840,7 @@ func (m Model) renderDownloadPanel(node state.Node, maxWidth int, maxLines int) 
 		if i == m.downloadCursor {
 			cursor = ">"
 		}
-		mark := m.downloadMarker(asset.URL)
+		mark := colorDownloadMarker(m.downloadMarker(asset.URL))
 		name := strings.TrimSpace(asset.Name)
 		if name == "" {
 			name = asset.URL
@@ -1104,6 +1124,53 @@ func (m Model) panelContentHeight() int {
 		return 1
 	}
 	return contentHeight
+}
+
+func colorStatusTag(s state.Status) string {
+	tag := fmt.Sprintf("[%s]", s)
+	switch s {
+	case state.StatusOK:
+		return okStyle.Render(tag)
+	case state.StatusStale:
+		return staleStyle.Render(tag)
+	case state.StatusError:
+		return errorStyle.Render(tag)
+	case state.StatusNever:
+		return neverStyle.Render(tag)
+	default:
+		return mutedStyle.Render(tag)
+	}
+}
+
+func colorStatusWord(s state.Status) string {
+	word := strings.ToUpper(string(s))
+	switch s {
+	case state.StatusOK:
+		return okStyle.Render(word)
+	case state.StatusStale:
+		return staleStyle.Render(word)
+	case state.StatusError:
+		return errorStyle.Render(word)
+	case state.StatusNever:
+		return neverStyle.Render(word)
+	default:
+		return mutedStyle.Render(word)
+	}
+}
+
+func colorDownloadMarker(mark string) string {
+	switch mark {
+	case "✓":
+		return okStyle.Render(mark)
+	case "✗":
+		return errorStyle.Render(mark)
+	case "…":
+		return selectedStyle.Render(mark)
+	case "·":
+		return mutedStyle.Render(mark)
+	default:
+		return mark
+	}
 }
 
 func (m *Model) focusDownloadAsset(assetURL string) {
