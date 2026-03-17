@@ -2,6 +2,8 @@ package app
 
 import (
 	"errors"
+	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -218,5 +220,36 @@ func TestDownloadFlow(t *testing.T) {
 	}
 	if !persisted {
 		t.Fatalf("expected persisted choices callback")
+	}
+}
+
+func TestDownloadViewportKeepsHeaderAndCursorVisible(t *testing.T) {
+	now := time.Date(2026, 3, 17, 12, 0, 0, 0, time.UTC)
+	st := baseStateForTUI(now)
+	root := st.Nodes["url:root"]
+	root.Assets = make([]state.AssetRef, 0, 40)
+	for i := 1; i <= 40; i++ {
+		root.Assets = append(root.Assets, state.AssetRef{
+			Name: fmt.Sprintf("%d.in", i),
+			URL:  fmt.Sprintf("https://themis.housing.rug.nl/file/course/%%40tests/%d.in", i),
+			Kind: "file",
+		})
+	}
+	st.Nodes["url:root"] = root
+
+	m, err := NewModel(Config{State: st})
+	if err != nil {
+		t.Fatalf("new model failed: %v", err)
+	}
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'d'}})
+	m = updated.(Model)
+	m.downloadCursor = 39
+
+	view := m.renderDetailsForSize(48, 14)
+	if !strings.Contains(view, "Download") {
+		t.Fatalf("expected download header visible")
+	}
+	if !strings.Contains(view, "> [x] 40.in") {
+		t.Fatalf("expected cursor line for last item visible")
 	}
 }

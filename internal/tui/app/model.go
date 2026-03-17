@@ -84,6 +84,7 @@ type Model struct {
 	recentAssetChoices  map[string][]string
 	downloadSelection   map[string]bool
 	downloadCursor      int
+	downloadOffset      int
 	downloadInFlight    bool
 	refreshInFlight     bool
 	expanded            map[string]bool
@@ -144,6 +145,7 @@ func NewModel(cfg Config) (Model, error) {
 		defaultDownloadDir:  strings.TrimSpace(cfg.DefaultDownloadDir),
 		recentAssetChoices:  cloneChoiceMap(cfg.RecentAssetChoices),
 		downloadSelection:   map[string]bool{},
+		downloadOffset:      0,
 		expanded: map[string]bool{
 			resolvedRootID: true,
 		},
@@ -212,6 +214,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if m.downloadCursor > 0 {
 					m.downloadCursor--
 				}
+				m.adjustDownloadOffset()
 				return m, nil
 			}
 			if m.selectedIndex > 0 {
@@ -224,6 +227,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if m.downloadCursor < len(assets)-1 {
 					m.downloadCursor++
 				}
+				m.adjustDownloadOffset()
 				return m, nil
 			}
 			if m.selectedIndex < len(m.flat)-1 {
@@ -333,8 +337,8 @@ func (m Model) View() string {
 	rightContentWidth := maxInt(1, rightOuterWidth-panelFrameW)
 	panelContentHeight := maxInt(1, topHeight-panelFrameH)
 
-	treePane := panelStyle.Width(leftContentWidth).Height(panelContentHeight).Render(clipTopLines(m.renderTree(), panelContentHeight))
-	detailsPane := panelStyle.Width(rightContentWidth).Height(panelContentHeight).Render(clipTopLines(m.renderDetails(), panelContentHeight))
+	treePane := panelStyle.Width(leftContentWidth).Height(panelContentHeight).Render(m.renderTreeForHeight(panelContentHeight))
+	detailsPane := panelStyle.Width(rightContentWidth).Height(panelContentHeight).Render(m.renderDetailsForSize(rightContentWidth, panelContentHeight))
 
 	top := lipgloss.JoinHorizontal(lipgloss.Top, treePane, detailsPane)
 	return lipgloss.JoinVertical(lipgloss.Left, top, statusPane)
@@ -395,6 +399,7 @@ func (m Model) openDownloadMode() (tea.Model, tea.Cmd) {
 	}
 	m.mode = "download"
 	m.downloadCursor = 0
+	m.downloadOffset = 0
 	m.downloadSelection = map[string]bool{}
 
 	if recent, ok := m.recentAssetChoices[m.selectedNodeID]; ok && len(recent) > 0 {
@@ -668,13 +673,21 @@ func (m Model) renderTree() string {
 	return strings.Join(lines, "\n")
 }
 
-func (m Model) renderDetails() string {
+func (m Model) renderTreeForHeight(maxLines int) string {
+	return clipTopLines(m.renderTree(), maxLines)
+}
+
+func (m Model) renderDetailsForSize(maxWidth int, maxLines int) string {
+	return clipTopLines(m.renderDetails(maxWidth, maxLines), maxLines)
+}
+
+func (m Model) renderDetails(maxWidth int, maxLines int) string {
 	node := m.selectedNode()
 	if node == nil {
 		return "Details\n(no selection)"
 	}
 	if m.mode == "download" {
-		return m.renderDownloadPanel(*node)
+		return m.renderDownloadPanel(*node, maxWidth, maxLines)
 	}
 
 	lines := []string{
@@ -751,19 +764,23 @@ func (m Model) renderStatus() string {
 	return fmt.Sprintf("%s | %s |  %s | %s", strings.ToUpper(m.mode), inFlight, selected, keys)
 }
 
-func (m Model) renderDownloadPanel(node state.Node) string {
+func (m Model) renderDownloadPanel(node state.Node, maxWidth int, maxLines int) string {
 	assets := m.selectedNodeAssets()
-	lines := []string{
+	header := []string{
 		"Download",
 		fmt.Sprintf("Node: %s", displayTitle(node)),
 		fmt.Sprintf("Target dir: %s", m.defaultDownloadDir),
-		"Keys: up/down move, space toggle, a select-all, c clear, enter download, h/d close",
+		"Keys: j/k move, space toggle, a all, c clear, enter download",
 		"",
 	}
-	if len(assets) == 0 {
-		lines = append(lines, "(no assets available)")
-		return strings.Join(lines, "\n")
+	for i := range header {
+		header[i] = truncateOneLine(header[i], maxWidth)
 	}
+	if len(assets) == 0 {
+		header = append(header, "(no assets available)")
+		return strings.Join(header, "\n")
+	}
+	assetLines := make([]string, 0, len(assets))
 	for i, asset := range assets {
 		cursor := " "
 		if i == m.downloadCursor {
@@ -777,10 +794,45 @@ func (m Model) renderDownloadPanel(node state.Node) string {
 		if name == "" {
 			name = asset.URL
 		}
-		lines = append(lines, fmt.Sprintf("%s [%s] %s (%s)", cursor, mark, name, asset.Kind))
+		assetLines = append(assetLines, fmt.Sprintf("%s [%s] %s (%s)", cursor, mark, name, asset.Kind))
 	}
-	lines = append(lines, "")
-	lines = append(lines, fmt.Sprintf("Selected: %d/%d", len(m.selectedAssetURLs()), len(assets)))
+	footer := fmt.Sprintf("Selected: %d/%d", len(m.selectedAssetURLs()), len(assets))
+
+	if maxLines <= len(header)+1 {
+		lines := append([]string{}, header...)
+		lines = append(lines, footer)
+		return strings.Join(clipLines(lines, maxLines), "\n")
+	}
+
+	listHeight := maxLines - len(header) - 1
+	if listHeight < 1 {
+		listHeight = 1
+	}
+	start := m.downloadOffset
+	if start < 0 {
+		start = 0
+	}
+	if m.downloadCursor < start {
+		start = m.downloadCursor
+	}
+	if m.downloadCursor >= start+listHeight {
+		start = m.downloadCursor - listHeight + 1
+	}
+	maxStart := len(assetLines) - listHeight
+	if maxStart < 0 {
+		maxStart = 0
+	}
+	if start > maxStart {
+		start = maxStart
+	}
+	end := start + listHeight
+	if end > len(assetLines) {
+		end = len(assetLines)
+	}
+
+	lines := append([]string{}, header...)
+	lines = append(lines, assetLines[start:end]...)
+	lines = append(lines, footer)
 	return strings.Join(lines, "\n")
 }
 
@@ -862,6 +914,38 @@ func cloneChoiceMap(in map[string][]string) map[string][]string {
 		out[k] = append([]string(nil), v...)
 	}
 	return out
+}
+
+func (m *Model) adjustDownloadOffset() {
+	assets := m.selectedNodeAssets()
+	if len(assets) == 0 {
+		m.downloadOffset = 0
+		return
+	}
+	// Header uses 5 fixed lines in download mode.
+	listHeight := m.height - 5 - 1 - 4 // top pane minus header/footer/status/borders safety
+	if listHeight < 1 {
+		listHeight = 1
+	}
+	if m.downloadOffset < 0 {
+		m.downloadOffset = 0
+	}
+	maxOffset := len(assets) - listHeight
+	if maxOffset < 0 {
+		maxOffset = 0
+	}
+	if m.downloadOffset > maxOffset {
+		m.downloadOffset = maxOffset
+	}
+	if m.downloadCursor < m.downloadOffset {
+		m.downloadOffset = m.downloadCursor
+	}
+	if m.downloadCursor >= m.downloadOffset+listHeight {
+		m.downloadOffset = m.downloadCursor - listHeight + 1
+	}
+	if m.downloadOffset < 0 {
+		m.downloadOffset = 0
+	}
 }
 
 func readableKind(kind string) string {
@@ -958,6 +1042,16 @@ func clipTopLines(content string, maxLines int) string {
 		return content
 	}
 	return strings.Join(lines[:maxLines], "\n")
+}
+
+func clipLines(lines []string, maxLines int) []string {
+	if maxLines <= 0 {
+		return []string{}
+	}
+	if len(lines) <= maxLines {
+		return lines
+	}
+	return lines[:maxLines]
 }
 
 func truncateOneLine(content string, maxWidth int) string {
