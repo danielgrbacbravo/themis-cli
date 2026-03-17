@@ -129,6 +129,14 @@ func TestRefreshNode_ReplacesChildrenAndTracksRemovedEdges(t *testing.T) {
 	if !contains(st.Nodes[newID].ParentIDs, courseID) {
 		t.Fatalf("new child missing parent edge")
 	}
+	tombsAny, ok := st.Nodes[courseID].Details[state.TombstonesDetailsKey]
+	if !ok {
+		t.Fatalf("expected tombstones in parent details")
+	}
+	tombs, ok := tombsAny.([]state.Tombstone)
+	if !ok || len(tombs) == 0 || tombs[len(tombs)-1].ChildID != oldID {
+		t.Fatalf("unexpected tombstones payload: %#v", tombsAny)
+	}
 }
 
 func TestRefreshNode_ExtractsMetadata(t *testing.T) {
@@ -143,6 +151,9 @@ func TestRefreshNode_ExtractsMetadata(t *testing.T) {
 		<div class="cfg-line"><span class="cfg-key">Leading Submission:</span><span class="cfg-val">latest</span></div>
 		<div class="cfg-line"><span class="cfg-key">End:</span><span class="cfg-val"><span class="tip-text">2026-08-31T21:59:59.000Z</span>Mon Aug 31 2026 23:59:59 GMT+0200</span></div>
 		</div>
+		<div><a href="/file/course/%40tests/1.in">1.in</a></div>
+		<div><a href="/file/course/%40tests/1.out">1.out</a></div>
+		<div><a href="/download/os/lab3.zip">lab3.zip</a></div>
 		<p class="ass-description">Course summary</p>
 		</body></html>`,
 	}
@@ -183,6 +194,15 @@ func TestRefreshNode_ExtractsMetadata(t *testing.T) {
 	links := linksAny.(map[string]string)
 	if links["status_page"] != "https://themis.housing.rug.nl/stats/2025-2026/os" {
 		t.Fatalf("unexpected status_page: %#v", links["status_page"])
+	}
+	if len(node.Assets) != 3 {
+		t.Fatalf("expected 3 assets, got %d", len(node.Assets))
+	}
+	if node.Assets[0].URL != "https://themis.housing.rug.nl/file/course/%40tests/1.in" || node.Assets[0].Kind != "file" {
+		t.Fatalf("unexpected first asset: %#v", node.Assets[0])
+	}
+	if node.Assets[2].Kind != "archive" {
+		t.Fatalf("unexpected archive asset kind: %#v", node.Assets[2])
 	}
 }
 

@@ -25,6 +25,8 @@ type RefreshResult struct {
 	Errors       []string `json:"errors"`
 }
 
+const maxRemovedChildTombstones = 100
+
 type pageChild struct {
 	Title     string
 	URL       string
@@ -38,6 +40,7 @@ type pageSnapshot struct {
 	NavAPIURL   string
 	Children    []pageChild
 	Details     map[string]any
+	Assets      []state.AssetRef
 	ContentHash string
 }
 
@@ -117,15 +120,19 @@ func (s *Service) RefreshNode(client *http.Client, st *state.State, targetURL st
 			ChildIDs:         append([]string{}, current.ChildIDs...),
 			ChildrenHydrated: exists && current.ChildrenHydrated,
 			DepthHint:        computeDepthHint(snap.Canonical),
-			Status:           state.StatusOK,
-			LastFetchedAt:    ptrTime(now),
-			LastSuccessAt:    ptrTime(now),
-			LastError:        "",
+			Status:           current.Status,
+			LastFetchedAt:    current.LastFetchedAt,
+			LastSuccessAt:    current.LastSuccessAt,
+			LastError:        current.LastError,
 			ContentHash:      "sha256:" + snap.ContentHash,
 			Details:          snap.Details,
-			Assets:           existingAssetsOrEmpty(current.Assets),
+			Assets:           snap.Assets,
 			CreatedAt:        current.CreatedAt,
 			UpdatedAt:        current.UpdatedAt,
+		}
+		if err := state.ApplyFetchSuccess(&patch, now); err != nil {
+			result.Errors = append(result.Errors, fmt.Sprintf("%s: %v", canonicalURL, err))
+			return
 		}
 
 		_, changed, upsertErr := state.UpsertNode(st, patch, now)
@@ -204,6 +211,12 @@ func (s *Service) RefreshNode(client *http.Client, st *state.State, targetURL st
 				updatedNodeIDs[id] = struct{}{}
 			}
 		}
+		if len(diff.Removed) > 0 {
+			parent := st.Nodes[nodeID]
+			if err := state.ApplyChildRemovalTombstones(&parent, diff.Removed, now, maxRemovedChildTombstones); err == nil {
+				st.Nodes[nodeID] = parent
+			}
+		}
 		result.RemovedEdges += len(diff.Removed)
 
 		if remainingDepth == 0 {
@@ -270,6 +283,7 @@ func (s *Service) fetchPageSnapshot(client *http.Client, pageURL string) (pageSn
 		NavAPIURL:   s.extractCurrentNavAPIURL(doc, canonical),
 		Children:    children,
 		Details:     extractDetails(doc, canonical),
+		Assets:      extractAssets(doc, canonical),
 		ContentHash: hex.EncodeToString(h[:]),
 	}, nil
 }
@@ -397,6 +411,46 @@ func extractDetails(doc *goquery.Document, canonicalURL string) map[string]any {
 	return out
 }
 
+func extractAssets(doc *goquery.Document, canonicalURL string) []state.AssetRef {
+	assets := make([]state.AssetRef, 0)
+	seen := map[string]bool{}
+
+	doc.Find("a[href]").Each(func(_ int, sel *goquery.Selection) {
+		href, ok := sel.Attr("href")
+		if !ok {
+			return
+		}
+		className, _ := sel.Attr("class")
+		if strings.Contains(className, "status") {
+			return
+		}
+
+		abs, err := resolveLinkFromCanonical(canonicalURL, href)
+		if err != nil {
+			return
+		}
+		if shouldIgnoreAssetURL(abs) {
+			return
+		}
+		if seen[abs] {
+			return
+		}
+		seen[abs] = true
+
+		name := strings.TrimSpace(sel.Text())
+		if name == "" {
+			name = path.Base(strings.TrimSpace(href))
+		}
+		assets = append(assets, state.AssetRef{
+			Kind: classifyAssetKind(abs),
+			Name: name,
+			URL:  abs,
+		})
+	})
+
+	return assets
+}
+
 func resolveLinkFromCanonical(canonicalBase string, href string) (string, error) {
 	base, err := url.Parse(canonicalBase)
 	if err != nil {
@@ -417,6 +471,44 @@ func normalizeConfigKey(raw string) string {
 		return raw
 	}
 	return raw
+}
+
+func shouldIgnoreAssetURL(raw string) bool {
+	parsed, err := url.Parse(raw)
+	if err != nil {
+		return true
+	}
+	cleanPath := strings.TrimSpace(parsed.Path)
+	if strings.HasPrefix(cleanPath, "/course") {
+		return true
+	}
+	if strings.HasPrefix(cleanPath, "/stats") {
+		return true
+	}
+	if strings.HasPrefix(cleanPath, "/help") || strings.HasPrefix(cleanPath, "/user") || strings.HasPrefix(cleanPath, "/log") {
+		return true
+	}
+	return false
+}
+
+func classifyAssetKind(raw string) string {
+	parsed, err := url.Parse(raw)
+	if err != nil {
+		return "asset"
+	}
+	cleanPath := strings.ToLower(parsed.Path)
+	switch {
+	case strings.Contains(cleanPath, "/file/"):
+		return "file"
+	case strings.HasSuffix(cleanPath, ".in") || strings.HasSuffix(cleanPath, ".out"):
+		return "test"
+	case strings.HasSuffix(cleanPath, ".zip") || strings.HasSuffix(cleanPath, ".tar") || strings.HasSuffix(cleanPath, ".tgz") || strings.HasSuffix(cleanPath, ".gz") || strings.HasSuffix(cleanPath, ".rar"):
+		return "archive"
+	case strings.HasSuffix(cleanPath, ".pdf") || strings.HasSuffix(cleanPath, ".md") || strings.HasSuffix(cleanPath, ".txt"):
+		return "document"
+	default:
+		return "asset"
+	}
 }
 
 func inferKindFromURL(canonicalURL string) string {
@@ -462,18 +554,6 @@ func computeDepthHint(canonicalURL string) int {
 	return len(strings.Split(p, "/"))
 }
 
-func existingAssetsOrEmpty(in []state.AssetRef) []state.AssetRef {
-	if in == nil {
-		return []state.AssetRef{}
-	}
-	return in
-}
-
-func ptrTime(t time.Time) *time.Time {
-	tt := t.UTC()
-	return &tt
-}
-
 func markNodeFetchError(st *state.State, canonicalURL string, msg string, now time.Time) string {
 	nodeID := state.NodeIDFromCanonicalURL(canonicalURL)
 	node, ok := st.Nodes[nodeID]
@@ -487,10 +567,7 @@ func markNodeFetchError(st *state.State, canonicalURL string, msg string, now ti
 			CreatedAt:    now,
 		}
 	}
-	node.Status = state.StatusError
-	node.LastError = msg
-	node.LastFetchedAt = ptrTime(now)
-	node.UpdatedAt = now
+	_ = state.ApplyFetchFailure(&node, now, msg)
 	if node.ParentIDs == nil {
 		node.ParentIDs = []string{}
 	}
