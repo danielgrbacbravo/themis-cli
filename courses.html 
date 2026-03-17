@@ -1,0 +1,403 @@
+<!doctype html>
+<html class="no-js">
+	<head>
+		<title>Assignment: Courses - Themis</title>
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<link rel="stylesheet" href="/css/fontawesome/fontawesome.css" />
+		<link rel="stylesheet" href="/css/index.css" />
+		
+		<style>
+			body {
+				visibility: hidden;
+				opacity: 0;
+			}
+		</style>
+
+		<link id="lightThemeSheet" class="lightTheme" title="themeSheet" rel="stylesheet" href="/css/themes/default.css" media="(prefers-color-scheme: light)"/>
+		<link id="darkThemeSheet" class="darkTheme" title="themeSheet" rel="stylesheet" href="/css/themes/default-dark.css" media="(prefers-color-scheme: dark)"/>
+
+		<style>
+			body.showRhythm {
+				background-repeat: repeat;
+				background-position: top left;
+			}
+
+			body.showRhythm .shade {
+				background-position: top left;
+			}
+		</style>
+		<script src="/js/index.js"></script>
+	</head>
+	<body>
+		<header>
+			<h1 id="global-title" class="text accent"><a href="/course/">Themis<span id="global-widetitle"> &ndash; Programming Judge</span></a></h1>
+			<nav id="global-menu"><ul class="round">
+				<li><a href="/help" class="iconize help">Help</a></li>
+				<li>
+					<a href="/user" class="iconize user">D. Grbac Bravo (s5482585)</a>
+				</li>
+				<li><a href="/log/out" class="iconize logout">Log out</a></li>
+			</ul>
+		</nav>
+	</header>
+
+		<section id="global-motd">
+			<!--<section id="notices" class="notices notice notice-error" style="margin-left: 0; padding: 10px 20px 20px;">
+			    <h3 style="padding: 0;">Upcoming Maintenance</h3>
+			    <p style="padding: 0;">
+			        Themis will undergo server maintenance on Monday, April 14th, starting at 11:00. We expect the service to be restored before the end of the day.
+			    </p>
+			</section>
+			<br/>-->
+			<!--Welcome!-->
+		</section>
+
+
+		<div class="page-container">
+			<div class="page-left">
+				<section id="nav" class="border accent">
+					<div class="sec-heading fill accent round">
+						<h3 class="sec-title"><i class="fa fa-fw fa-sitemap"></i>
+							Navigation</h3>
+					</div>
+					<div class="sec-body round">
+						<div class="subsec round nav-container vertical">
+
+
+							<details class="nav-tree-details" open data-fetched="true">
+
+							<summary>
+
+
+							
+							<strong>
+							<span class="ass-link">
+								<a href="/course/"
+									data-navhref="/api/navigation/"
+									class="
+											iconize
+												
+												ass-group
+									"
+									title="/"
+								>Courses</a>
+							</span>
+							</strong>
+
+
+							</summary>
+
+								<ul class="nav-list">
+									<li>
+
+
+											<details class="nav-tree-details" >
+
+											<summary>
+
+
+											
+
+											<span class="ass-link">
+												<a href="/course/2022-2023"
+													data-navhref="/api/navigation/2022-2023"
+													class="
+															iconize
+																
+																ass-group
+													"
+													title="/2022-2023"
+												>2022-2023</a>
+											</span>
+
+											</summary>
+
+											
+
+											</details>
+
+
+											<!--the nav part for help page-->
+									</li>
+									<li>
+
+
+											<details class="nav-tree-details" >
+
+											<summary>
+
+
+											
+
+											<span class="ass-link">
+												<a href="/course/2023-2024"
+													data-navhref="/api/navigation/2023-2024"
+													class="
+															iconize
+																
+																ass-group
+													"
+													title="/2023-2024"
+												>2023-2024</a>
+											</span>
+
+											</summary>
+
+											
+
+											</details>
+
+
+											<!--the nav part for help page-->
+									</li>
+									<li>
+
+
+											<details class="nav-tree-details" >
+
+											<summary>
+
+
+											
+
+											<span class="ass-link">
+												<a href="/course/2024-2025"
+													data-navhref="/api/navigation/2024-2025"
+													class="
+															iconize
+																
+																ass-group
+													"
+													title="/2024-2025"
+												>2024-2025</a>
+											</span>
+
+											</summary>
+
+											
+
+											</details>
+
+
+											<!--the nav part for help page-->
+									</li>
+									<li>
+
+
+											<details class="nav-tree-details" >
+
+											<summary>
+
+
+											
+
+											<span class="ass-link">
+												<a href="/course/2025-2026"
+													data-navhref="/api/navigation/2025-2026"
+													class="
+															iconize
+																
+																ass-group
+													"
+													title="/2025-2026"
+												>2025-2026</a>
+											</span>
+
+											</summary>
+
+											
+
+											</details>
+
+
+											<!--the nav part for help page-->
+									</li>
+								</ul>
+							
+
+							</details>
+
+
+							<!--the nav part for help page-->
+					</div>
+				</div>
+			</section>
+		</div>
+		<div class="page-body">
+			<section id="/" class="assignment border accent">
+				<div class="sec-heading fill accent round">
+					<h3 
+						class="
+								sec-title
+								iconize
+									
+									ass-group
+								
+						"
+					>
+						/ <a class="fill accent large" href="/course/">Courses</a>
+					</h3>
+				</div>
+				<div class="sec-body round subsec-split">
+					<div class="subsec-container">
+						<div class="subsec round help shade">
+							<h4 class="subsec-title iconize help fold-button round" 
+								data-foldable="help-assignment">Course/Assignment</h4>
+
+							<div id="help-assignment" class="foldable memorable">
+
+							<p>Use the links under <i class="icon ass-group"></i> Assignments
+							to find the assignment you need to submit to.</p>
+
+
+							</div>
+						</div>
+						<div class="subsec round shade ass-children">
+							<h4 class="subsec-title iconize ass-group round">Assignments</h4>
+
+							<ul class="round">
+							<li class="large">
+								<span class="ass-link">
+									<a href="/course/2022-2023"
+										data-navhref="/api/navigation/2022-2023"
+										class="
+												iconize
+													
+													ass-group
+										"
+										title="/2022-2023"
+									>2022-2023</a>
+								</span>
+							</li>
+							<li class="large">
+								<span class="ass-link">
+									<a href="/course/2023-2024"
+										data-navhref="/api/navigation/2023-2024"
+										class="
+												iconize
+													
+													ass-group
+										"
+										title="/2023-2024"
+									>2023-2024</a>
+								</span>
+							</li>
+							<li class="large">
+								<span class="ass-link">
+									<a href="/course/2024-2025"
+										data-navhref="/api/navigation/2024-2025"
+										class="
+												iconize
+													
+													ass-group
+										"
+										title="/2024-2025"
+									>2024-2025</a>
+								</span>
+							</li>
+							<li class="large">
+								<span class="ass-link">
+									<a href="/course/2025-2026"
+										data-navhref="/api/navigation/2025-2026"
+										class="
+												iconize
+													
+													ass-group
+										"
+										title="/2025-2026"
+									>2025-2026</a>
+								</span>
+							</li>
+							</ul>
+						</div>
+
+
+
+
+								<div class="subsec round shade">
+									<h4 class="subsec-title iconize info fold-button round" 
+										data-foldable="details-none">Details (none)</h4>
+									<div id="details-none" class="foldable memorable">
+										<p class="ass-description">Find your course under the current year</p>
+										<div class="cfg-container round ass-config">
+											<div class="cfg-line">
+												<span class="cfg-key">
+														<span class="tip-container">
+														<span class="tip" data-title="The submission counted as the final submission and thus used for grading." tabindex="0">
+													Leading Submission:
+														</span>
+														<span role="tooltip" class="tip-text">The submission counted as the final submission and thus used for grading.</span>
+														</span>
+												</span>
+												<span class="cfg-val">
+													latest
+												</span>
+											</div>
+											<div class="cfg-line">
+												<span class="cfg-key">
+													Sort:
+												</span>
+												<span class="cfg-val">
+													Yes
+												</span>
+											</div>
+										</div>
+								</div>
+							</div>
+
+
+					</div>
+					<div class="subsec-act">
+					</div>
+				</div>
+			</section>
+		</div>
+	</div>
+
+	<footer>
+		<div class="centrate">
+			<span class="js display-settings">
+				&ensp;
+				<div class="display-settings-dropdown">
+					<label for="selTheme">Color Scheme:</label>
+					<select class="small" id="selTheme">
+						<option value="default">Default</option>
+						<option value="solarized">Solarized</option>
+						<option value="tomorrow">Tomorrow</option>
+						<option value="fuchsia">Fuchsia</option>
+						<option value="plain">CGA</option>
+					</select>
+				</div>
+
+				<div class="display-settings-dropdown" style="min-width: 0;">
+					<!-- <label for="colorScheme">Color Scheme:</label> -->
+					<select class="small" id="colorScheme" checked>
+						<option value="auto">Auto</option>
+						<option value="light">Light</option>
+						<option value="dark">Dark</option>
+					</select>
+				</div>
+
+				&ensp;
+				<div class="display-settings-checkbox">
+					<input type="checkbox" id="chkRoundedCorners" checked />
+					<label for="chkRoundedCorners">Rounded Corners</label>
+				</div>
+				<!-- &ensp;
+				<div class="display-settings-checkbox">
+					<input type="checkbox" id="chkEnableScroll" checked />
+					<label for="chkEnableScroll">Custom scroll-bars</label>
+				</div> -->
+			</span>
+		</div>
+		
+		<p class="centrate" style="font-size: 1.2em; margin-bottom: 28px;">
+			<a class="iconize help" href="/about">About Themis</a> -
+			<a href="https://www.rug.nl/info/privacy" target="_blank" >Privacy Policy</a>
+		</p>
+
+	</footer>
+	<script src="/socket.io/socket.io.js"></script>
+</body>
+
+</html>
