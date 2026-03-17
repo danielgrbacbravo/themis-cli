@@ -707,9 +707,9 @@ func (m Model) renderDetails() string {
 }
 
 func (m Model) renderStatus() string {
-	selected := ""
+	selected := "none"
 	if row := m.selectedRow(); row != nil {
-		selected = row.NodeID
+		selected = row.Title
 	}
 	inFlight := "idle"
 	if m.refreshInFlight {
@@ -718,7 +718,15 @@ func (m Model) renderStatus() string {
 	if m.downloadInFlight {
 		inFlight = "downloading"
 	}
-	return fmt.Sprintf("Status | nodes:%d visible:%d selected:%s | mode:%s/%s | keys: up/down left/right enter r R f p d space a c g G q | %s", len(m.st.Nodes), len(m.flat), selected, m.mode, inFlight, m.statusText)
+	keys := "j/k move h/l fold enter open r node R subtree f full d download p project q quit"
+	if m.mode == "download" {
+		keys = "j/k move space toggle a all c clear enter download h/d close q quit"
+	}
+	msg := strings.TrimSpace(m.statusText)
+	if msg != "" {
+		return fmt.Sprintf("%s | %s |  %s | %s | %s", strings.ToUpper(m.mode), inFlight, selected, keys, msg)
+	}
+	return fmt.Sprintf("%s | %s |  %s | %s", strings.ToUpper(m.mode), inFlight, selected, keys)
 }
 
 func (m Model) renderDownloadPanel(node state.Node) string {
