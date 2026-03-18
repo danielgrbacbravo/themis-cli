@@ -206,6 +206,173 @@ func TestRefreshNode_ExtractsMetadata(t *testing.T) {
 	}
 }
 
+func TestRefreshNode_AssignmentStatsSummaryAndFallback(t *testing.T) {
+	base := "https://themis.housing.rug.nl"
+	assignment := base + "/course/2025-2026/os/lab5/5_file_writer"
+	statsURL := base + "/stats/2025-2026/os/lab5/5_file_writer"
+
+	assignmentPage := `<html><body>
+	<section class="assignment"><div class="sec-heading"><h3 class="sec-title">/ <a href="/course/">Courses</a> / <a href="/course/2025-2026">2025-2026</a> / <a href="/course/2025-2026/os">Operating Systems</a> / <a href="/course/2025-2026/os/lab5/5_file_writer">Exercise 5: File Writer</a></h3></div></section>
+	<div class="subsec round help shade"><a href="/stats/2025-2026/os/lab5/5_file_writer" class="iconize status">Status</a></div>
+	<div class="subsec round shade ass-children"><ul class="round"></ul></div>
+	</body></html>`
+
+	statsPage := `<html><body>
+	<section class="status border passed">
+		<div class="sec-heading fill passed round"><h3 class="sec-title fill status-icon passed">Status: <a class="fill passed" href="/stats/2025-2026/os/lab5/5_file_writer/@submissions/s5482585">Exercise 5: File Writer</a></h3></div>
+		<div class="sec-body round">
+			<div class="cfg-container round">
+				<div class="cfg-line"><span class="cfg-key">Assignment:</span><span class="cfg-val"><a href="/course/2025-2026/os/lab5/5_file_writer">Exercise 5: File Writer</a></span></div>
+				<div class="cfg-line"><span class="cfg-key">Group:</span><span class="cfg-val">D. Grbac Bravo</span></div>
+				<div class="cfg-line"><span class="cfg-key">Status:</span><span class="cfg-val"><i class="status-icon passed"></i><strong>passed</strong>: Passed all test cases</span></div>
+				<div class="cfg-line"><span class="cfg-key">Grade:</span><span class="cfg-val">20.00</span></div>
+				<div class="cfg-group-title">Counts</div>
+				<div class="cfg-line"><span class="cfg-key">Total:</span><span class="cfg-val">8</span></div>
+				<div class="cfg-line"><span class="cfg-key">Passed:</span><span class="cfg-val">1</span></div>
+				<div class="cfg-group-title">Submissions</div>
+				<div class="cfg-line"><span class="cfg-key">Leading:</span><span class="cfg-val"><i class="icon passed"></i><a href="/submission/2025-2026/os/lab5/5_file_writer/@submissions/s5482585/s5482585-7">Exercise 5: File Writer / s5482585-7</a></span></div>
+			</div>
+		</div>
+		<div class="subsec-act"><a class="button iconize download fill accent round" href="/download/2025-2026/os/lab5/5_file_writer/@submissions/s5482585?whose=group&group=s5482585">Download</a></div>
+	</section>
+	</body></html>`
+
+	st := state.NewEmptyState()
+	service := NewService(base)
+
+	hits1 := map[string]int{}
+	pages1 := map[string]string{
+		assignment: assignmentPage,
+		statsURL:   statsPage,
+	}
+	if _, err := service.RefreshNode(testClientFromMap(t, pages1, hits1), &st, assignment, 0); err != nil {
+		t.Fatalf("first refresh failed: %v", err)
+	}
+
+	nodeID, _, _ := state.NodeIDFromURL(assignment)
+	node := st.Nodes[nodeID]
+	links := node.Details["links"].(map[string]string)
+	if links["status_page"] != statsURL {
+		t.Fatalf("unexpected status page: %#v", links["status_page"])
+	}
+	statsAny, ok := node.Details["stats"]
+	if !ok {
+		t.Fatalf("expected stats details")
+	}
+	statsDetails, ok := statsAny.(map[string]any)
+	if !ok {
+		t.Fatalf("invalid stats type: %T", statsAny)
+	}
+	if statsDetails["status_page"] != statsURL {
+		t.Fatalf("unexpected stats status page: %#v", statsDetails["status_page"])
+	}
+	counts, ok := statsDetails["counts"].(map[string]any)
+	if !ok {
+		t.Fatalf("invalid counts type: %T", statsDetails["counts"])
+	}
+	if counts["total"] != 8 || counts["passed"] != 1 {
+		t.Fatalf("unexpected counts: %#v", counts)
+	}
+
+	// Stats fetch should be best effort: assignment refresh still succeeds and
+	// previously cached stats should remain available.
+	hits2 := map[string]int{}
+	pages2 := map[string]string{
+		assignment: assignmentPage,
+	}
+	result, err := service.RefreshNode(testClientFromMap(t, pages2, hits2), &st, assignment, 0)
+	if err != nil {
+		t.Fatalf("second refresh failed: %v", err)
+	}
+	if len(result.Errors) == 0 {
+		t.Fatalf("expected stats warning on second refresh")
+	}
+	node = st.Nodes[nodeID]
+	if _, ok := node.Details["stats"]; !ok {
+		t.Fatalf("expected cached stats to be preserved")
+	}
+}
+
+func TestRefreshNode_AssignmentChildGetsDerivedStatusPage(t *testing.T) {
+	base := "https://themis.housing.rug.nl"
+	course := base + "/course/2025-2026/os"
+	child := base + "/course/2025-2026/os/lab5/5_file_writer"
+
+	pages := map[string]string{
+		course: `<html><body>
+		<section class="assignment"><div class="sec-heading"><h3 class="sec-title">/ <a href="/course/">Courses</a> / <a href="/course/2025-2026">2025-2026</a> / <a href="/course/2025-2026/os">Operating Systems</a></h3></div></section>
+		<div class="subsec round shade ass-children"><ul class="round"><li><span class="ass-link"><a href="/course/2025-2026/os/lab5/5_file_writer">Exercise 5: File Writer</a></span></li></ul></div>
+		</body></html>`,
+	}
+
+	service := NewService(base)
+	st := state.NewEmptyState()
+
+	if _, err := service.RefreshNode(testClientFromMap(t, pages, map[string]int{}), &st, course, 0); err != nil {
+		t.Fatalf("refresh failed: %v", err)
+	}
+
+	childID, _, _ := state.NodeIDFromURL(child)
+	childNode := st.Nodes[childID]
+	if childNode.Kind != "assignment" {
+		t.Fatalf("expected assignment child kind, got %q", childNode.Kind)
+	}
+	links := childNode.Details["links"].(map[string]string)
+	wantStatus := "https://themis.housing.rug.nl/stats/2025-2026/os/lab5/5_file_writer"
+	if links["status_page"] != wantStatus {
+		t.Fatalf("unexpected derived status page: %#v", links["status_page"])
+	}
+}
+
+func TestRefreshNode_DepthZeroFetchesDerivedStatsForTargetAssignment(t *testing.T) {
+	base := "https://themis.housing.rug.nl"
+	assignment := base + "/course/2025-2026/os/lab5/4_recursive_traversal"
+	statsURL := base + "/stats/2025-2026/os/lab5/4_recursive_traversal"
+
+	pages := map[string]string{
+		assignment: `<html><body>
+		<section class="assignment"><div class="sec-heading"><h3 class="sec-title">/ <a href="/course/">Courses</a> / <a href="/course/2025-2026">2025-2026</a> / <a href="/course/2025-2026/os">Operating Systems</a> / <a href="/course/2025-2026/os/lab5/4_recursive_traversal">Exercise 4: Recursive Directory Traversal</a></h3></div></section>
+		<div class="subsec round shade ass-children"><ul class="round"></ul></div>
+		</body></html>`,
+		statsURL: `<html><body>
+		<section class="status border passed">
+			<div class="sec-heading fill passed round"><h3 class="sec-title fill status-icon passed">Status: <a class="fill passed" href="/stats/2025-2026/os/lab5/4_recursive_traversal/@submissions/s5482585">Exercise 4: Recursive Directory Traversal</a></h3></div>
+			<div class="sec-body round">
+				<div class="cfg-container round">
+					<div class="cfg-line"><span class="cfg-key">Status:</span><span class="cfg-val"><i class="status-icon passed"></i><strong>passed</strong>: Passed all test cases</span></div>
+					<div class="cfg-line"><span class="cfg-key">Grade:</span><span class="cfg-val">20.00</span></div>
+					<div class="cfg-group-title">Counts</div>
+					<div class="cfg-line"><span class="cfg-key">Total:</span><span class="cfg-val">8</span></div>
+					<div class="cfg-line"><span class="cfg-key">Passed:</span><span class="cfg-val">8</span></div>
+				</div>
+			</div>
+		</section>
+		</body></html>`,
+	}
+
+	service := NewService(base)
+	st := state.NewEmptyState()
+
+	result, err := service.RefreshNode(testClientFromMap(t, pages, map[string]int{}), &st, assignment, 0)
+	if err != nil {
+		t.Fatalf("refresh failed: %v", err)
+	}
+	if len(result.Errors) != 0 {
+		t.Fatalf("unexpected warnings/errors: %#v", result.Errors)
+	}
+
+	nodeID, _, _ := state.NodeIDFromURL(assignment)
+	node := st.Nodes[nodeID]
+	statsAny, ok := node.Details["stats"]
+	if !ok {
+		t.Fatalf("expected stats to be fetched for depth-0 target assignment")
+	}
+	stats := statsAny.(map[string]any)
+	if stats["status_page"] != statsURL {
+		t.Fatalf("unexpected status_page: %#v", stats["status_page"])
+	}
+}
+
 func contains(list []string, target string) bool {
 	for _, v := range list {
 		if v == target {

@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"path"
+	"strconv"
 	"strings"
 	"time"
 
@@ -110,6 +111,29 @@ func (s *Service) RefreshNode(client *http.Client, st *state.State, targetURL st
 		nodeID := state.NodeIDFromCanonicalURL(snap.Canonical)
 		current, exists := st.Nodes[nodeID]
 
+		if snap.Kind == "assignment" {
+			explicitStatusURL := statusPageLinkFromDetails(snap.Details)
+			statusURL := explicitStatusURL
+			if statusURL == "" {
+				statusURL = statusPageLinkFromDetails(current.Details)
+			}
+			if statusURL == "" {
+				statusURL = deriveStatsPageURL(snap.Canonical)
+			}
+			if statusURL != "" {
+				snap.Details = withStatusPageLink(snap.Details, statusURL)
+				shouldFetchStats := explicitStatusURL != "" || hasStatsDetails(current.Details) || (parentID == "" && depth == 0)
+				if shouldFetchStats {
+					stats, err := s.fetchAssignmentStats(client, statusURL)
+					if err != nil {
+						result.Errors = append(result.Errors, fmt.Sprintf("[stats] %s: %v", statusURL, err))
+					} else {
+						snap.Details = withStatsDetails(snap.Details, stats)
+					}
+				}
+			}
+		}
+
 		patch := state.Node{
 			ID:               nodeID,
 			Kind:             snap.Kind,
@@ -125,7 +149,7 @@ func (s *Service) RefreshNode(client *http.Client, st *state.State, targetURL st
 			LastSuccessAt:    current.LastSuccessAt,
 			LastError:        current.LastError,
 			ContentHash:      "sha256:" + snap.ContentHash,
-			Details:          snap.Details,
+			Details:          mergeDetails(current.Details, snap.Details),
 			Assets:           snap.Assets,
 			CreatedAt:        current.CreatedAt,
 			UpdatedAt:        current.UpdatedAt,
@@ -180,6 +204,11 @@ func (s *Service) RefreshNode(client *http.Client, st *state.State, targetURL st
 			}
 			if childNode.Kind == "" {
 				childNode.Kind = inferKindFromURL(childCanonical)
+			}
+			if childNode.Kind == "assignment" {
+				if statusURL := deriveStatsPageURL(childCanonical); statusURL != "" {
+					childNode.Details = withStatusPageLink(childNode.Details, statusURL)
+				}
 			}
 			if childNode.DepthHint == 0 {
 				childNode.DepthHint = computeDepthHint(childCanonical)
@@ -286,6 +315,290 @@ func (s *Service) fetchPageSnapshot(client *http.Client, pageURL string) (pageSn
 		Assets:      extractAssets(doc, canonical),
 		ContentHash: hex.EncodeToString(h[:]),
 	}, nil
+}
+
+func (s *Service) fetchAssignmentStats(client *http.Client, statsURL string) (map[string]any, error) {
+	resp, err := client.Get(statsURL)
+	if err != nil {
+		return nil, fmt.Errorf("fetch stats page: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= http.StatusBadRequest {
+		return nil, fmt.Errorf("fetch stats page status %d", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read stats page: %w", err)
+	}
+	doc, err := goquery.NewDocumentFromReader(strings.NewReader(string(body)))
+	if err != nil {
+		return nil, fmt.Errorf("parse stats page: %w", err)
+	}
+
+	canonicalStatsURL, err := state.CanonicalizeURL(statsURL)
+	if err != nil {
+		return nil, fmt.Errorf("canonicalize stats URL: %w", err)
+	}
+
+	section := doc.Find("section.status").First()
+	if section.Length() == 0 {
+		return nil, fmt.Errorf("status section not found")
+	}
+
+	summary := map[string]any{}
+	if title := strings.TrimSpace(section.Find(".sec-heading .sec-title a").First().Text()); title != "" {
+		summary["title"] = title
+	}
+
+	counts := map[string]any{}
+	submissionRefs := map[string]any{}
+	currentGroup := ""
+
+	section.Find(".cfg-group-title, .cfg-line").Each(func(_ int, sel *goquery.Selection) {
+		if sel.HasClass("cfg-group-title") {
+			currentGroup = normalizeConfigKey(sel.Text())
+			return
+		}
+		if !sel.HasClass("cfg-line") {
+			return
+		}
+
+		key := normalizeConfigKey(sel.Find(".cfg-key").First().Text())
+		keySel := sel.Find(".cfg-key").First().Clone()
+		keySel.Find(".tip-text").Remove()
+		key = normalizeConfigKey(keySel.Text())
+		if key == "" {
+			return
+		}
+		valSel := sel.Find(".cfg-val").First()
+		valText := strings.TrimSpace(valSel.Text())
+
+		link := valSel.Find("a").First()
+		linkURL := ""
+		linkTitle := ""
+		if link.Length() > 0 {
+			linkTitle = strings.TrimSpace(link.Text())
+			if href, ok := link.Attr("href"); ok {
+				if abs, rErr := resolveLinkFromCanonical(canonicalStatsURL, href); rErr == nil {
+					linkURL = abs
+				}
+			}
+		}
+
+		switch currentGroup {
+		case "counts":
+			if v, ok := parseIntValue(valText); ok {
+				counts[key] = v
+			}
+		case "submissions":
+			ref := map[string]any{}
+			if linkURL != "" {
+				ref["url"] = linkURL
+			}
+			if linkTitle != "" {
+				ref["title"] = linkTitle
+			}
+			statusClass := statusClassFromSelection(valSel)
+			if statusClass != "" {
+				ref["status"] = statusClass
+			}
+			if len(ref) > 0 {
+				submissionRefs[key] = ref
+			}
+		default:
+			switch key {
+			case "assignment":
+				if linkURL != "" {
+					summary["assignment_url"] = linkURL
+				}
+				if linkTitle != "" {
+					summary["assignment_title"] = linkTitle
+				} else if valText != "" {
+					summary["assignment_title"] = valText
+				}
+			case "group", "grade", "language", "visible":
+				if valText != "" {
+					summary[key] = valText
+				}
+			case "status":
+				if valText != "" {
+					summary["status_text"] = valText
+				}
+				if statusClass := statusClassFromSelection(valSel); statusClass != "" {
+					summary["status"] = statusClass
+				}
+			}
+		}
+	})
+
+	if downloadHref, ok := section.Find("a.button.iconize.download").First().Attr("href"); ok {
+		if abs, err := resolveLinkFromCanonical(canonicalStatsURL, downloadHref); err == nil {
+			summary["download_url"] = abs
+		}
+	}
+
+	stats := map[string]any{
+		"status_page": canonicalStatsURL,
+		"fetched_at":  time.Now().UTC().Format(time.RFC3339),
+	}
+	if len(summary) > 0 {
+		stats["summary"] = summary
+	}
+	if len(counts) > 0 {
+		stats["counts"] = counts
+	}
+	if len(submissionRefs) > 0 {
+		stats["submission_refs"] = submissionRefs
+	}
+
+	return stats, nil
+}
+
+func parseIntValue(raw string) (int, bool) {
+	raw = strings.TrimSpace(strings.ReplaceAll(raw, ",", ""))
+	if raw == "" {
+		return 0, false
+	}
+	v, err := strconv.Atoi(raw)
+	if err != nil {
+		return 0, false
+	}
+	return v, true
+}
+
+func statusClassFromSelection(sel *goquery.Selection) string {
+	if sel == nil {
+		return ""
+	}
+	icon := sel.Find("i.status-icon").First()
+	if icon.Length() == 0 {
+		icon = sel.Find("i.icon").First()
+	}
+	if icon.Length() == 0 {
+		return ""
+	}
+	classAttr, ok := icon.Attr("class")
+	if !ok {
+		return ""
+	}
+	for _, part := range strings.Fields(classAttr) {
+		if part == "icon" || part == "status-icon" {
+			continue
+		}
+		return strings.TrimSpace(part)
+	}
+	return ""
+}
+
+func mergeDetails(existing map[string]any, fresh map[string]any) map[string]any {
+	if len(existing) == 0 && len(fresh) == 0 {
+		return nil
+	}
+	merged := map[string]any{}
+	for k, v := range existing {
+		merged[k] = v
+	}
+	for k, v := range fresh {
+		merged[k] = v
+	}
+	return merged
+}
+
+func statusPageLinkFromDetails(details map[string]any) string {
+	if details == nil {
+		return ""
+	}
+	raw, ok := details["links"]
+	if !ok {
+		return ""
+	}
+	switch links := raw.(type) {
+	case map[string]string:
+		return strings.TrimSpace(links["status_page"])
+	case map[string]any:
+		if v, ok := links["status_page"]; ok {
+			if s, ok := v.(string); ok {
+				return strings.TrimSpace(s)
+			}
+		}
+	}
+	return ""
+}
+
+func withStatusPageLink(details map[string]any, statusPageURL string) map[string]any {
+	statusPageURL = strings.TrimSpace(statusPageURL)
+	if statusPageURL == "" {
+		return details
+	}
+	if details == nil {
+		details = map[string]any{}
+	}
+
+	raw, ok := details["links"]
+	if !ok {
+		details["links"] = map[string]string{"status_page": statusPageURL}
+		return details
+	}
+
+	switch links := raw.(type) {
+	case map[string]string:
+		clone := map[string]string{}
+		for k, v := range links {
+			clone[k] = v
+		}
+		clone["status_page"] = statusPageURL
+		details["links"] = clone
+	case map[string]any:
+		clone := map[string]any{}
+		for k, v := range links {
+			clone[k] = v
+		}
+		clone["status_page"] = statusPageURL
+		details["links"] = clone
+	default:
+		details["links"] = map[string]string{"status_page": statusPageURL}
+	}
+
+	return details
+}
+
+func withStatsDetails(details map[string]any, stats map[string]any) map[string]any {
+	if len(stats) == 0 {
+		return details
+	}
+	if details == nil {
+		details = map[string]any{}
+	}
+	details["stats"] = stats
+	return details
+}
+
+func hasStatsDetails(details map[string]any) bool {
+	if details == nil {
+		return false
+	}
+	_, ok := details["stats"]
+	return ok
+}
+
+func deriveStatsPageURL(canonicalURL string) string {
+	parsed, err := url.Parse(canonicalURL)
+	if err != nil {
+		return ""
+	}
+	if !strings.HasPrefix(parsed.Path, "/course/") {
+		return ""
+	}
+	suffix := strings.TrimPrefix(parsed.Path, "/course")
+	if suffix == "" || suffix == "/" {
+		return ""
+	}
+	statsURL := *parsed
+	statsURL.Path = "/stats" + suffix
+	statsURL.RawQuery = ""
+	statsURL.Fragment = ""
+	return statsURL.String()
 }
 
 func (s *Service) extractChildren(doc *goquery.Document, currentURL string) ([]pageChild, error) {
@@ -466,11 +779,16 @@ func resolveLinkFromCanonical(canonicalBase string, href string) (string, error)
 func normalizeConfigKey(raw string) string {
 	raw = strings.TrimSpace(strings.TrimSuffix(raw, ":"))
 	raw = strings.ToLower(raw)
-	raw = strings.ReplaceAll(raw, " ", "_")
-	if raw == "leading_submission" {
-		return raw
+	if raw == "" {
+		return ""
 	}
-	return raw
+	parts := strings.Fields(raw)
+	if len(parts) == 0 {
+		return ""
+	}
+	out := strings.Join(parts, "_")
+	out = strings.Trim(out, "_:")
+	return out
 }
 
 func shouldIgnoreAssetURL(raw string) bool {

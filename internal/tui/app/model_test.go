@@ -259,3 +259,153 @@ func TestDownloadViewportKeepsHeaderAndCursorVisible(t *testing.T) {
 		t.Fatalf("expected cursor line for last item visible")
 	}
 }
+
+func TestRenderDetails_ShowsStatsSummary(t *testing.T) {
+	now := time.Date(2026, 3, 18, 12, 0, 0, 0, time.UTC)
+	st := baseStateForTUI(now)
+	lab := st.Nodes["url:lab1"]
+	lab.Details = map[string]any{
+		"links": map[string]any{
+			"status_page": "https://themis.housing.rug.nl/stats/2025-2026/os/lab1",
+		},
+		"stats": map[string]any{
+			"status_page": "https://themis.housing.rug.nl/stats/2025-2026/os/lab1",
+			"summary": map[string]any{
+				"status": "passed",
+				"grade":  "20.00",
+				"group":  "D. Grbac Bravo",
+			},
+			"counts": map[string]any{
+				"total":  8,
+				"passed": 1,
+			},
+			"submission_refs": map[string]any{
+				"leading": map[string]any{
+					"title": "Exercise 1 / s5482585-7",
+					"url":   "https://themis.housing.rug.nl/submission/2025-2026/os/lab1/s5482585-7",
+				},
+			},
+		},
+	}
+	st.Nodes["url:lab1"] = lab
+
+	m, err := NewModel(Config{State: st})
+	if err != nil {
+		t.Fatalf("new model failed: %v", err)
+	}
+	// Move selection from root to lab1.
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	m = updated.(Model)
+
+	view := m.renderDetailsForSize(120, 40)
+	assertContains := func(needle string) {
+		if !strings.Contains(view, needle) {
+			t.Fatalf("expected details view to contain %q\nview:\n%s", needle, view)
+		}
+	}
+
+	assertContains("Stats:")
+	assertContains("- Page: https://themis.housing.rug.nl/stats/2025-2026/os/lab1")
+	assertContains("- Status: passed")
+	assertContains("- Grade: 20.00")
+	assertContains("- Group: D. Grbac Bravo")
+	assertContains("- Counts: total=8, passed=1")
+	assertContains("- Leading: Exercise 1 / s5482585-7")
+}
+
+func TestRenderDetails_ShowsStatsLoadHintWhenOnlyStatusPageExists(t *testing.T) {
+	now := time.Date(2026, 3, 18, 12, 0, 0, 0, time.UTC)
+	st := baseStateForTUI(now)
+	lab := st.Nodes["url:lab1"]
+	lab.Details = map[string]any{
+		"links": map[string]any{
+			"status_page": "https://themis.housing.rug.nl/stats/2025-2026/os/lab1",
+		},
+	}
+	st.Nodes["url:lab1"] = lab
+
+	m, err := NewModel(Config{State: st})
+	if err != nil {
+		t.Fatalf("new model failed: %v", err)
+	}
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	m = updated.(Model)
+
+	view := m.renderDetailsForSize(120, 30)
+	if !strings.Contains(view, "Status page: https://themis.housing.rug.nl/stats/2025-2026/os/lab1") {
+		t.Fatalf("expected status page in details view\nview:\n%s", view)
+	}
+	if !strings.Contains(view, "Stats: not loaded yet (refresh this node)") {
+		t.Fatalf("expected stats load hint in details view\nview:\n%s", view)
+	}
+}
+
+func TestRenderTree_AssignmentResultLabelsAndFreshnessIndicator(t *testing.T) {
+	now := time.Date(2026, 3, 18, 12, 0, 0, 0, time.UTC)
+	st := baseStateForTUI(now)
+
+	root := st.Nodes["url:root"]
+	root.ChildIDs = []string{"url:lab1", "url:lab2", "url:lab3", "url:lab4"}
+	st.Nodes["url:root"] = root
+
+	lab1 := st.Nodes["url:lab1"]
+	lab1.Details = map[string]any{
+		"links": map[string]any{"status_page": "https://themis.housing.rug.nl/stats/2025-2026/os/lab1"},
+		"stats": map[string]any{"summary": map[string]any{"status": "passed"}},
+	}
+	lab1.Status = state.StatusOK
+	st.Nodes["url:lab1"] = lab1
+
+	lab2 := st.Nodes["url:lab2"]
+	lab2.Details = map[string]any{
+		"links": map[string]any{"status_page": "https://themis.housing.rug.nl/stats/2025-2026/os/lab2"},
+		"stats": map[string]any{"summary": map[string]any{"status": "failed"}},
+	}
+	lab2.Status = state.StatusStale
+	st.Nodes["url:lab2"] = lab2
+
+	st.Nodes["url:lab3"] = state.Node{
+		ID:           "url:lab3",
+		Title:        "Lab 3",
+		Kind:         "assignment",
+		CanonicalURL: "https://themis.housing.rug.nl/course/2025-2026/os/lab3",
+		ParentIDs:    []string{"url:root"},
+		Status:       state.StatusOK,
+		Details: map[string]any{
+			"links": map[string]any{"status_page": "https://themis.housing.rug.nl/stats/2025-2026/os/lab3"},
+		},
+	}
+	st.Nodes["url:lab4"] = state.Node{
+		ID:           "url:lab4",
+		Title:        "Lab 4",
+		Kind:         "assignment",
+		CanonicalURL: "https://themis.housing.rug.nl/course/2025-2026/os/lab4",
+		ParentIDs:    []string{"url:root"},
+		Status:       state.StatusOK,
+		Details: map[string]any{
+			"links": map[string]any{"status_page": "https://themis.housing.rug.nl/stats/2025-2026/os/lab4"},
+			"stats": map[string]any{
+				"summary": map[string]any{
+					"grade": "17.50",
+				},
+			},
+		},
+	}
+
+	m, err := NewModel(Config{State: st})
+	if err != nil {
+		t.Fatalf("new model failed: %v", err)
+	}
+	tree := m.renderTree()
+
+	assertContains := func(needle string) {
+		if !strings.Contains(tree, needle) {
+			t.Fatalf("expected tree to contain %q\ntree:\n%s", needle, tree)
+		}
+	}
+	assertContains("[passed] Lab 1")
+	assertContains("[failing] Lab 2")
+	assertContains("(stale)")
+	assertContains("[not_submitted] Lab 3")
+	assertContains("[17.50] Lab 4")
+}

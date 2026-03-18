@@ -1,9 +1,12 @@
 package app
 
 import (
+	"encoding/json"
 	"fmt"
+	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -20,6 +23,10 @@ var (
 	staleStyle    = lipgloss.NewStyle().Foreground(lipgloss.AdaptiveColor{Light: "136", Dark: "214"})
 	errorStyle    = lipgloss.NewStyle().Foreground(lipgloss.AdaptiveColor{Light: "160", Dark: "203"})
 	neverStyle    = lipgloss.NewStyle().Foreground(lipgloss.AdaptiveColor{Light: "240", Dark: "240"})
+	passStyle     = lipgloss.NewStyle().Foreground(lipgloss.AdaptiveColor{Light: "28", Dark: "42"})
+	failStyle     = lipgloss.NewStyle().Foreground(lipgloss.AdaptiveColor{Light: "160", Dark: "203"})
+	noneStyle     = lipgloss.NewStyle().Foreground(lipgloss.AdaptiveColor{Light: "244", Dark: "246"})
+	infoStyle     = lipgloss.NewStyle().Foreground(lipgloss.AdaptiveColor{Light: "39", Dark: "81"})
 	selectedStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.AdaptiveColor{Light: "39", Dark: "81"})
 )
 
@@ -127,6 +134,7 @@ type treeRow struct {
 	Title       string
 	URL         string
 	Status      state.Status
+	ResultLabel string
 	HasChildren bool
 	Expanded    bool
 	ParentID    string
@@ -563,6 +571,7 @@ func (m *Model) rebuildFlat() {
 			Title:       displayTitle(node),
 			URL:         node.CanonicalURL,
 			Status:      node.Status,
+			ResultLabel: nodeResultLabel(node),
 			HasChildren: len(node.ChildIDs) > 0,
 			Expanded:    m.expanded[nodeID],
 			ParentID:    parentID,
@@ -708,7 +717,12 @@ func (m Model) renderTree() string {
 				expandGlyph = ">"
 			}
 		}
-		line := fmt.Sprintf("%s%s%s %s %s", prefix, indent, mutedStyle.Render(expandGlyph), colorStatusTag(row.Status), row.Title)
+		resultTag := colorResultTag(row.ResultLabel, row.Status)
+		freshTag := colorFreshnessTag(row.Status)
+		line := fmt.Sprintf("%s%s%s %s %s", prefix, indent, mutedStyle.Render(expandGlyph), resultTag, row.Title)
+		if strings.TrimSpace(freshTag) != "" {
+			line += " " + freshTag
+		}
 		if i == m.selectedIndex {
 			line = selectedStyle.Render(line)
 		}
@@ -738,7 +752,8 @@ func (m Model) renderDetails(maxWidth int, maxLines int) string {
 		titleStyle.Render("Details"),
 		fmt.Sprintf("Name: %s", displayTitle(*node)),
 		fmt.Sprintf("Type: %s", readableKind(node.Kind)),
-		fmt.Sprintf("Status: %s", colorStatusWord(node.Status)),
+		fmt.Sprintf("Result: %s", colorResultWord(nodeResultLabel(*node))),
+		fmt.Sprintf("Freshness: %s", colorStatusWord(node.Status)),
 	}
 	if node.CanonicalURL != "" {
 		lines = append(lines, fmt.Sprintf("Path: %s", node.CanonicalURL))
@@ -747,6 +762,22 @@ func (m Model) renderDetails(maxWidth int, maxLines int) string {
 	lines = append(lines, "")
 	lines = append(lines, fmt.Sprintf("Children: %d", len(node.ChildIDs)))
 	lines = append(lines, fmt.Sprintf("Files: %d", len(node.Assets)))
+
+	if statusPage := statusPageURL(node.Details); statusPage != "" {
+		lines = append(lines, fmt.Sprintf("Status page: %s", statusPage))
+	}
+	if statsLines := statsSummaryLines(node.Details); len(statsLines) > 0 {
+		lines = append(lines, "")
+		lines = append(lines, titleStyle.Render("Stats:"))
+		lines = append(lines, statsLines...)
+	} else if statusPageURL(node.Details) != "" {
+		lines = append(lines, mutedStyle.Render("Stats: not loaded yet (refresh this node)"))
+	}
+	if debugLines := statsDebugLines(node.Details); len(debugLines) > 0 {
+		lines = append(lines, "")
+		lines = append(lines, titleStyle.Render("Stats Debug:"))
+		lines = append(lines, debugLines...)
+	}
 
 	if node.LastSuccessAt != nil {
 		lines = append(lines, fmt.Sprintf("Fresh at: %s", node.LastSuccessAt.Local().Format("2006-01-02 15:04")))
@@ -775,11 +806,6 @@ func (m Model) renderDetails(maxWidth int, maxLines int) string {
 		lines = append(lines, "")
 		lines = append(lines, titleStyle.Render("Configuration:"))
 		lines = append(lines, configLines...)
-	}
-
-	if statusPage := statusPageURL(node.Details); statusPage != "" {
-		lines = append(lines, "")
-		lines = append(lines, fmt.Sprintf("Status page: %s", statusPage))
 	}
 
 	return strings.Join(lines, "\n")
@@ -1142,6 +1168,49 @@ func colorStatusTag(s state.Status) string {
 	}
 }
 
+func colorResultTag(result string, freshness state.Status) string {
+	tag := fmt.Sprintf("[%s]", result)
+	switch normalizeStatsKey(result) {
+	case "passed":
+		return passStyle.Render(tag)
+	case "failing":
+		return failStyle.Render(tag)
+	case "not_submitted":
+		return noneStyle.Render(tag)
+	case "ok":
+		return okStyle.Render(tag)
+	case "stale":
+		return staleStyle.Render(tag)
+	case "error":
+		return errorStyle.Render(tag)
+	case "never":
+		return neverStyle.Render(tag)
+	case "unknown":
+		if freshness == state.StatusError {
+			return errorStyle.Render(tag)
+		}
+		return mutedStyle.Render(tag)
+	default:
+		if isGradeLike(result) {
+			return infoStyle.Render(tag)
+		}
+		return mutedStyle.Render(tag)
+	}
+}
+
+func colorFreshnessTag(s state.Status) string {
+	switch s {
+	case state.StatusStale:
+		return staleStyle.Render("(stale)")
+	case state.StatusError:
+		return errorStyle.Render("(error)")
+	case state.StatusNever:
+		return neverStyle.Render("(never)")
+	default:
+		return mutedStyle.Render("")
+	}
+}
+
 func colorStatusWord(s state.Status) string {
 	word := strings.ToUpper(string(s))
 	switch s {
@@ -1155,6 +1224,23 @@ func colorStatusWord(s state.Status) string {
 		return neverStyle.Render(word)
 	default:
 		return mutedStyle.Render(word)
+	}
+}
+
+func colorResultWord(result string) string {
+	word := strings.ToUpper(strings.ReplaceAll(result, "_", " "))
+	if isGradeLike(result) {
+		return infoStyle.Render(strings.TrimSpace(result))
+	}
+	switch normalizeStatsKey(result) {
+	case "passed":
+		return passStyle.Render(word)
+	case "failing":
+		return failStyle.Render(word)
+	case "not_submitted":
+		return noneStyle.Render(word)
+	default:
+		return infoStyle.Render(word)
 	}
 }
 
@@ -1206,6 +1292,63 @@ func readableKind(kind string) string {
 		}
 		return strings.ToUpper(k[:1]) + k[1:]
 	}
+}
+
+func nodeResultLabel(node state.Node) string {
+	if strings.TrimSpace(strings.ToLower(node.Kind)) != "assignment" {
+		switch node.Status {
+		case state.StatusOK:
+			return "ok"
+		case state.StatusStale:
+			return "stale"
+		case state.StatusError:
+			return "error"
+		case state.StatusNever:
+			return "never"
+		default:
+			return "unknown"
+		}
+	}
+
+	summary := assignmentStatsSummary(node.Details)
+	status := normalizeStatsKey(stringAnyMapGetString(summary, "status"))
+	statusText := normalizeStatsKey(stringAnyMapGetString(summary, "status_text"))
+	combined := strings.TrimSpace(status + " " + statusText)
+
+	if containsAny(combined, "passed", "pass") {
+		return "passed"
+	}
+	if containsAny(combined, "failed", "failing", "wrong", "error", "timeout", "diff", "runtime") {
+		return "failing"
+	}
+	if grade := strings.TrimSpace(stringAnyMapGetString(summary, "grade")); grade != "" {
+		return grade
+	}
+	if statusPageURL(node.Details) != "" {
+		return "not_submitted"
+	}
+	return "unknown"
+}
+
+func containsAny(haystack string, needles ...string) bool {
+	for _, n := range needles {
+		if strings.Contains(haystack, n) {
+			return true
+		}
+	}
+	return false
+}
+
+func isGradeLike(raw string) bool {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return false
+	}
+	raw = strings.ReplaceAll(raw, ",", ".")
+	if _, err := strconv.ParseFloat(raw, 64); err == nil {
+		return true
+	}
+	return false
 }
 
 func breadcrumbString(details map[string]any) string {
@@ -1269,6 +1412,269 @@ func statusPageURL(details map[string]any) string {
 		}
 	}
 	return ""
+}
+
+func statsSummaryLines(details map[string]any) []string {
+	raw, ok := details["stats"]
+	if !ok {
+		return nil
+	}
+	stats, ok := raw.(map[string]any)
+	if !ok {
+		return nil
+	}
+
+	lines := make([]string, 0, 8)
+	if page := stringAnyMapGetString(stats, "status_page"); page != "" {
+		lines = append(lines, fmt.Sprintf("- Page: %s", page))
+	}
+
+	if summary := assignmentStatsSummary(details); summary != nil {
+		if status := stringAnyMapGetString(summary, "status"); status != "" {
+			lines = append(lines, fmt.Sprintf("- Status: %s", status))
+		} else if statusText := stringAnyMapGetString(summary, "status_text"); statusText != "" {
+			lines = append(lines, fmt.Sprintf("- Status: %s", statusText))
+		}
+		if grade := stringAnyMapGetString(summary, "grade"); grade != "" {
+			lines = append(lines, fmt.Sprintf("- Grade: %s", grade))
+		}
+		if group := stringAnyMapGetString(summary, "group"); group != "" {
+			lines = append(lines, fmt.Sprintf("- Group: %s", group))
+		}
+	}
+
+	if counts := anyMapToStringAnyMap(stats["counts"]); counts != nil {
+		total := stringAnyMapGetInt(counts, "total")
+		passed := stringAnyMapGetInt(counts, "passed")
+		if total >= 0 || passed >= 0 {
+			parts := make([]string, 0, 2)
+			if total >= 0 {
+				parts = append(parts, fmt.Sprintf("total=%d", total))
+			}
+			if passed >= 0 {
+				parts = append(parts, fmt.Sprintf("passed=%d", passed))
+			}
+			lines = append(lines, fmt.Sprintf("- Counts: %s", strings.Join(parts, ", ")))
+		}
+	}
+
+	if refs := stringAnyMapGetMap(stats, "submission_refs"); refs != nil {
+		refKeys := []string{"leading", "best", "latest", "first_pass", "last_pass"}
+		for _, key := range refKeys {
+			ref, ok := pickSubmissionRef(refs, key)
+			if !ok {
+				continue
+			}
+			refMap, ok := ref.(map[string]any)
+			if !ok {
+				continue
+			}
+			title := strings.TrimSpace(stringAnyMapGetString(refMap, "title"))
+			if title == "" {
+				title = strings.TrimSpace(stringAnyMapGetString(refMap, "url"))
+			}
+			if title == "" {
+				continue
+			}
+			label := strings.ReplaceAll(key, "_", " ")
+			lines = append(lines, fmt.Sprintf("- %s: %s", capitalizeFirst(label), title))
+		}
+	}
+
+	return lines
+}
+
+func assignmentStatsSummary(details map[string]any) map[string]any {
+	raw, ok := details["stats"]
+	if !ok {
+		return nil
+	}
+	stats, ok := raw.(map[string]any)
+	if !ok {
+		return nil
+	}
+	return stringAnyMapGetMap(stats, "summary")
+}
+
+func stringAnyMapGetMap(m map[string]any, key string) map[string]any {
+	if m == nil {
+		return nil
+	}
+	v, ok := mapLookupNormalized(m, key)
+	if !ok {
+		return nil
+	}
+	out, ok := v.(map[string]any)
+	if !ok {
+		return nil
+	}
+	return out
+}
+
+func anyMapToStringAnyMap(v any) map[string]any {
+	switch vv := v.(type) {
+	case map[string]any:
+		return vv
+	case map[string]int:
+		out := make(map[string]any, len(vv))
+		for k, val := range vv {
+			out[k] = val
+		}
+		return out
+	case map[string]string:
+		out := make(map[string]any, len(vv))
+		for k, val := range vv {
+			out[k] = val
+		}
+		return out
+	default:
+		return nil
+	}
+}
+
+func statsDebugLines(details map[string]any) []string {
+	if !statsDebugEnabled() {
+		return nil
+	}
+	raw, ok := details["stats"]
+	if !ok {
+		return []string{"- stats key missing"}
+	}
+	stats, ok := raw.(map[string]any)
+	if !ok {
+		return []string{fmt.Sprintf("- stats type: %T", raw)}
+	}
+	lines := []string{
+		fmt.Sprintf("- has summary: %t", stringAnyMapGetMap(stats, "summary") != nil),
+		fmt.Sprintf("- has counts: %t", anyMapToStringAnyMap(stats["counts"]) != nil),
+		fmt.Sprintf("- has refs: %t", stringAnyMapGetMap(stats, "submission_refs") != nil),
+	}
+	if b, err := json.Marshal(stats); err == nil {
+		lines = append(lines, "- raw: "+string(b))
+	} else {
+		lines = append(lines, fmt.Sprintf("- raw marshal error: %v", err))
+	}
+	return lines
+}
+
+func statsDebugEnabled() bool {
+	v := strings.TrimSpace(strings.ToLower(os.Getenv("THEMIS_DEBUG_STATS")))
+	return v == "1" || v == "true" || v == "yes" || v == "on"
+}
+
+func stringAnyMapGetString(m map[string]any, key string) string {
+	if m == nil {
+		return ""
+	}
+	v, ok := mapLookupNormalized(m, key)
+	if !ok {
+		return ""
+	}
+	switch vv := v.(type) {
+	case string:
+		return strings.TrimSpace(vv)
+	default:
+		return ""
+	}
+}
+
+func stringAnyMapGetInt(m map[string]any, key string) int {
+	if m == nil {
+		return -1
+	}
+	v, ok := mapLookupNormalized(m, key)
+	if !ok {
+		return -1
+	}
+	switch vv := v.(type) {
+	case int:
+		return vv
+	case int64:
+		return int(vv)
+	case float64:
+		return int(vv)
+	case float32:
+		return int(vv)
+	case string:
+		i, err := strconv.Atoi(strings.TrimSpace(vv))
+		if err == nil {
+			return i
+		}
+	}
+	return -1
+}
+
+func capitalizeFirst(s string) string {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return ""
+	}
+	runes := []rune(s)
+	first := strings.ToUpper(string(runes[0]))
+	if len(runes) == 1 {
+		return first
+	}
+	return first + string(runes[1:])
+}
+
+func mapLookupNormalized(m map[string]any, key string) (any, bool) {
+	if m == nil {
+		return nil, false
+	}
+	if v, ok := m[key]; ok {
+		return v, true
+	}
+	target := normalizeStatsKey(key)
+	for k, v := range m {
+		if normalizeStatsKey(k) == target {
+			return v, true
+		}
+	}
+	return nil, false
+}
+
+func normalizeStatsKey(raw string) string {
+	raw = strings.TrimSpace(strings.ToLower(raw))
+	if raw == "" {
+		return ""
+	}
+	parts := strings.Fields(raw)
+	if len(parts) == 0 {
+		return ""
+	}
+	out := strings.Join(parts, "_")
+	out = strings.ReplaceAll(out, "-", "_")
+	out = strings.Trim(out, "_:")
+	return out
+}
+
+func pickSubmissionRef(refs map[string]any, target string) (any, bool) {
+	if refs == nil {
+		return nil, false
+	}
+	if v, ok := mapLookupNormalized(refs, target); ok {
+		return v, true
+	}
+	normTarget := normalizeStatsKey(target)
+	aliases := map[string][]string{
+		"leading":    {"counts_towards_grade", "submission_that_counts_towards_the_grade"},
+		"best":       {"latest_submission_with_the_best_result"},
+		"latest":     {"most_recent_submission"},
+		"first_pass": {"first_submission_that_passed"},
+		"last_pass":  {"last_submission_to_pass_before_the_deadline"},
+	}
+	for k, v := range refs {
+		nk := normalizeStatsKey(k)
+		if strings.Contains(nk, normTarget) {
+			return v, true
+		}
+		for _, alias := range aliases[normTarget] {
+			if strings.Contains(nk, alias) {
+				return v, true
+			}
+		}
+	}
+	return nil, false
 }
 
 func clipTopLines(content string, maxLines int) string {
