@@ -3,8 +3,10 @@ package themis
 import (
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/cookiejar"
+	"net/http/httptest"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -199,4 +201,89 @@ func TestClassifyLoadSessionError_EmptySession(t *testing.T) {
 	if !errors.Is(err, ErrNotAuthenticated) {
 		t.Fatalf("expected ErrNotAuthenticated, got: %v", err)
 	}
+}
+
+func TestNewSessionWithAuthConfig_ValidSession(t *testing.T) {
+	server := newAuthTestServer()
+	defer server.Close()
+
+	path := filepath.Join(t.TempDir(), "session.json")
+	if err := SaveSessionState(path, SessionState{
+		SchemaVersion: 1,
+		BaseURL:       server.URL,
+		Cookies: []SessionCookieScope{
+			{
+				URL: server.URL,
+				Cookies: []SessionCookie{
+					{Name: "session", Value: "ok"},
+				},
+			},
+		},
+	}); err != nil {
+		t.Fatalf("save seed session: %v", err)
+	}
+
+	session, err := NewSessionWithAuthConfig(server.URL, AuthConfig{SessionFile: path})
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+	if session == nil {
+		t.Fatal("expected non-nil session")
+	}
+}
+
+func TestNewSessionWithAuthConfig_ExpiredSession(t *testing.T) {
+	server := newAuthTestServer()
+	defer server.Close()
+
+	path := filepath.Join(t.TempDir(), "session.json")
+	if err := SaveSessionState(path, SessionState{
+		SchemaVersion: 1,
+		BaseURL:       server.URL,
+		Cookies: []SessionCookieScope{
+			{
+				URL: server.URL,
+				Cookies: []SessionCookie{
+					{Name: "session", Value: "expired"},
+				},
+			},
+		},
+	}); err != nil {
+		t.Fatalf("save seed session: %v", err)
+	}
+
+	_, err := NewSessionWithAuthConfig(server.URL, AuthConfig{SessionFile: path})
+	if !errors.Is(err, ErrSessionExpired) {
+		t.Fatalf("expected ErrSessionExpired, got: %v", err)
+	}
+}
+
+func newAuthTestServer() *httptest.Server {
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/":
+			w.WriteHeader(http.StatusOK)
+			_, _ = io.WriteString(w, "ok")
+			return
+		case "/user":
+			cookie, err := r.Cookie("session")
+			if err != nil || cookie.Value != "ok" {
+				w.WriteHeader(http.StatusUnauthorized)
+				_, _ = io.WriteString(w, "unauthorized")
+				return
+			}
+			w.WriteHeader(http.StatusOK)
+			_, _ = io.WriteString(w, `
+<section class="border accent">
+  <div class="cfg-container">
+    <div class="cfg-line"><span class="cfg-key">Full name:</span><span class="cfg-val">Alice Example</span></div>
+    <div class="cfg-line"><span class="cfg-key">Email:</span><span class="cfg-val">alice@example.com</span></div>
+  </div>
+</section>`)
+			return
+		default:
+			w.WriteHeader(http.StatusNotFound)
+			_, _ = io.WriteString(w, "not found")
+		}
+	}))
 }

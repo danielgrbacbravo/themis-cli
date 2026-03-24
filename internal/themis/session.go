@@ -76,10 +76,18 @@ func NewSessionWithAuthConfig(baseURL string, authConfig AuthConfig) (*Session, 
 		return nil, fmt.Errorf("%w: %v", ErrNotAuthenticated, err)
 	}
 
-	return &Session{
+	session := &Session{
 		BaseURL: normalizedBaseURL,
 		Client:  client,
-	}, nil
+	}
+	if _, err := session.ValidateAuthentication(); err != nil {
+		if errors.Is(err, ErrSessionExpired) || errors.Is(err, ErrNotAuthenticated) {
+			return nil, err
+		}
+		return nil, fmt.Errorf("%w: %v", ErrSessionExpired, err)
+	}
+
+	return session, nil
 }
 
 func (s *Session) GetUserData() (UserData, error) {
