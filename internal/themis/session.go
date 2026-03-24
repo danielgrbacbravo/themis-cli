@@ -1,18 +1,22 @@
 package themis
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/PuerkitoBio/goquery"
 )
 
 const userDataRoute = "/user"
+const sessionFileSchemaVersion = 1
 
 type Session struct {
 	BaseURL string
@@ -20,9 +24,7 @@ type Session struct {
 }
 
 type AuthConfig struct {
-	CookieFile        string
-	CookieEnv         string
-	DefaultCookiePath string
+	SessionFile string
 }
 
 type UserData struct {
@@ -33,7 +35,7 @@ type UserData struct {
 }
 
 func NewSession(baseURL string, cookiePath string) (*Session, error) {
-	return NewSessionWithAuthConfig(baseURL, AuthConfig{CookieFile: cookiePath})
+	return NewSessionWithAuthConfig(baseURL, AuthConfig{SessionFile: cookiePath})
 }
 
 func NewSessionWithAuthConfig(baseURL string, authConfig AuthConfig) (*Session, error) {
@@ -52,12 +54,19 @@ func NewSessionWithAuthConfig(baseURL string, authConfig AuthConfig) (*Session, 
 		return nil, err
 	}
 
-	cookies, _, err := resolveCookies(authConfig)
+	sessionFilePath, err := resolveSessionFilePath(authConfig)
 	if err != nil {
 		return nil, err
 	}
 
-	client.Jar.SetCookies(parsedBaseURL, cookies)
+	sessionState, err := loadSessionState(sessionFilePath)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := restoreCookieJar(client.Jar, parsedBaseURL, sessionState); err != nil {
+		return nil, err
+	}
 
 	return &Session{
 		BaseURL: normalizedBaseURL,
@@ -137,17 +146,183 @@ func initializeHTTPClient() (*http.Client, error) {
 	return &http.Client{Jar: jar}, nil
 }
 
-func loadCookiesFromFile(path string) (string, error) {
-	rawCookie, err := os.ReadFile(path)
-	if err != nil {
-		return "", err
+func resolveSessionFilePath(authConfig AuthConfig) (string, error) {
+	if strings.TrimSpace(authConfig.SessionFile) != "" {
+		return strings.TrimSpace(authConfig.SessionFile), nil
 	}
 
-	cookieString := strings.TrimSpace(string(rawCookie))
-	if cookieString == "" {
-		return "", fmt.Errorf("cookie file is empty: %s", path)
+	return DefaultSessionFilePath()
+}
+
+func DefaultSessionFilePath() (string, error) {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("resolve user home directory: %w", err)
 	}
-	return cookieString, nil
+
+	return filepath.Join(homeDir, ".config", "themis", "session.json"), nil
+}
+
+func loadSessionState(path string) (SessionState, error) {
+	rawState, err := os.ReadFile(path)
+	if err != nil {
+		return SessionState{}, fmt.Errorf("read session file %q: %w", path, err)
+	}
+
+	rawTrimmed := strings.TrimSpace(string(rawState))
+	if rawTrimmed == "" {
+		return SessionState{}, fmt.Errorf("session file is empty: %s", path)
+	}
+
+	var sessionState SessionState
+	if err := json.Unmarshal([]byte(rawTrimmed), &sessionState); err != nil {
+		legacyCookies, parseErr := parseCookieString(rawTrimmed, fmt.Sprintf("legacy session file %q", path))
+		if parseErr != nil {
+			return SessionState{}, fmt.Errorf("decode session state from %q: %w", path, err)
+		}
+
+		sessionState = SessionState{
+			SchemaVersion: sessionFileSchemaVersion,
+			Cookies: []SessionCookieScope{
+				{
+					URL:     "",
+					Cookies: fromHTTPCookies(legacyCookies),
+				},
+			},
+		}
+	}
+
+	if sessionState.SchemaVersion == 0 {
+		sessionState.SchemaVersion = sessionFileSchemaVersion
+	}
+	if sessionState.Cookies == nil {
+		sessionState.Cookies = []SessionCookieScope{}
+	}
+	return sessionState, nil
+}
+
+func SaveSessionState(path string, state SessionState) error {
+	if strings.TrimSpace(path) == "" {
+		return fmt.Errorf("session file path is required")
+	}
+
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return fmt.Errorf("create session directory: %w", err)
+	}
+
+	if state.SchemaVersion == 0 {
+		state.SchemaVersion = sessionFileSchemaVersion
+	}
+	if state.Cookies == nil {
+		state.Cookies = []SessionCookieScope{}
+	}
+
+	payload, err := json.MarshalIndent(state, "", "  ")
+	if err != nil {
+		return fmt.Errorf("encode session state: %w", err)
+	}
+	payload = append(payload, '\n')
+	if err := os.WriteFile(path, payload, 0o600); err != nil {
+		return fmt.Errorf("write session file %q: %w", path, err)
+	}
+	return nil
+}
+
+func (s *Session) SaveState(path string, auth SessionAuthSettings, user *SessionUser, lastAuthenticatedAt time.Time) error {
+	baseURL, err := url.Parse(s.BaseURL)
+	if err != nil {
+		return fmt.Errorf("parse base URL %q: %w", s.BaseURL, err)
+	}
+
+	state := SessionState{
+		SchemaVersion:       sessionFileSchemaVersion,
+		BaseURL:             s.BaseURL,
+		LastAuthenticatedAt: &lastAuthenticatedAt,
+		User:                user,
+		Auth:                auth,
+		Cookies: []SessionCookieScope{
+			{
+				URL:     s.BaseURL,
+				Cookies: fromHTTPCookies(s.Client.Jar.Cookies(baseURL)),
+			},
+		},
+	}
+
+	return SaveSessionState(path, state)
+}
+
+func restoreCookieJar(jar http.CookieJar, baseURL *url.URL, state SessionState) error {
+	if len(state.Cookies) == 0 {
+		return fmt.Errorf("session file has no cookies")
+	}
+
+	restored := 0
+	for _, scopedCookies := range state.Cookies {
+		targetURL := baseURL
+		if strings.TrimSpace(scopedCookies.URL) != "" {
+			parsed, err := url.Parse(strings.TrimSpace(scopedCookies.URL))
+			if err != nil {
+				return fmt.Errorf("invalid cookie scope URL %q: %w", scopedCookies.URL, err)
+			}
+			if parsed.Scheme == "" || parsed.Host == "" {
+				return fmt.Errorf("invalid cookie scope URL %q", scopedCookies.URL)
+			}
+			targetURL = parsed
+		}
+
+		cookies := toHTTPCookies(scopedCookies.Cookies)
+		if len(cookies) == 0 {
+			continue
+		}
+		jar.SetCookies(targetURL, cookies)
+		restored += len(cookies)
+	}
+
+	if restored == 0 {
+		return fmt.Errorf("session file has no valid cookies")
+	}
+	return nil
+}
+
+type SessionState struct {
+	SchemaVersion       int                  `json:"schema_version"`
+	BaseURL             string               `json:"base_url,omitempty"`
+	LastAuthenticatedAt *time.Time           `json:"last_authenticated_at,omitempty"`
+	User                *SessionUser         `json:"user,omitempty"`
+	Auth                SessionAuthSettings  `json:"auth"`
+	Cookies             []SessionCookieScope `json:"cookies"`
+}
+
+type SessionUser struct {
+	FullName      string `json:"full_name,omitempty"`
+	Email         string `json:"email,omitempty"`
+	FirstLoggedIn string `json:"first_logged_in,omitempty"`
+	LastLoggedIn  string `json:"last_logged_in,omitempty"`
+}
+
+type SessionAuthSettings struct {
+	Username     string `json:"username,omitempty"`
+	Password     string `json:"password,omitempty"`
+	SaveUsername bool   `json:"save_username"`
+	SavePassword bool   `json:"save_password"`
+}
+
+type SessionCookieScope struct {
+	URL     string          `json:"url,omitempty"`
+	Cookies []SessionCookie `json:"cookies"`
+}
+
+type SessionCookie struct {
+	Name     string    `json:"name"`
+	Value    string    `json:"value"`
+	Path     string    `json:"path,omitempty"`
+	Domain   string    `json:"domain,omitempty"`
+	Expires  time.Time `json:"expires,omitempty"`
+	MaxAge   int       `json:"max_age,omitempty"`
+	Secure   bool      `json:"secure,omitempty"`
+	HTTPOnly bool      `json:"http_only,omitempty"`
+	SameSite int       `json:"same_site,omitempty"`
 }
 
 func parseCookieString(cookieString string, source string) ([]*http.Cookie, error) {
@@ -178,59 +353,47 @@ func parseCookieString(cookieString string, source string) ([]*http.Cookie, erro
 	return cookies, nil
 }
 
-func resolveCookies(authConfig AuthConfig) ([]*http.Cookie, string, error) {
-	attemptErrors := make([]string, 0, 3)
-
-	cookieFile := strings.TrimSpace(authConfig.CookieFile)
-	if cookieFile != "" {
-		cookieString, err := loadCookiesFromFile(cookieFile)
-		if err != nil {
-			attemptErrors = append(attemptErrors, fmt.Sprintf("--cookie-file %q: %v", cookieFile, err))
-		} else {
-			cookies, parseErr := parseCookieString(cookieString, fmt.Sprintf("file %q", cookieFile))
-			if parseErr != nil {
-				attemptErrors = append(attemptErrors, fmt.Sprintf("--cookie-file %q: %v", cookieFile, parseErr))
-			} else {
-				return cookies, "cookie-file", nil
-			}
+func toHTTPCookies(cookies []SessionCookie) []*http.Cookie {
+	result := make([]*http.Cookie, 0, len(cookies))
+	for _, cookie := range cookies {
+		name := strings.TrimSpace(cookie.Name)
+		if name == "" {
+			continue
 		}
+		result = append(result, &http.Cookie{
+			Name:     name,
+			Value:    cookie.Value,
+			Path:     cookie.Path,
+			Domain:   cookie.Domain,
+			Expires:  cookie.Expires,
+			MaxAge:   cookie.MaxAge,
+			Secure:   cookie.Secure,
+			HttpOnly: cookie.HTTPOnly,
+			SameSite: http.SameSite(cookie.SameSite),
+		})
 	}
+	return result
+}
 
-	cookieEnv := strings.TrimSpace(authConfig.CookieEnv)
-	if cookieEnv != "" {
-		cookieString := strings.TrimSpace(os.Getenv(cookieEnv))
-		if cookieString == "" {
-			attemptErrors = append(attemptErrors, fmt.Sprintf("--cookie-env %q: environment variable is unset or empty", cookieEnv))
-		} else {
-			cookies, err := parseCookieString(cookieString, fmt.Sprintf("env %q", cookieEnv))
-			if err != nil {
-				attemptErrors = append(attemptErrors, fmt.Sprintf("--cookie-env %q: %v", cookieEnv, err))
-			} else {
-				return cookies, "cookie-env", nil
-			}
+func fromHTTPCookies(cookies []*http.Cookie) []SessionCookie {
+	result := make([]SessionCookie, 0, len(cookies))
+	for _, cookie := range cookies {
+		if cookie == nil || strings.TrimSpace(cookie.Name) == "" {
+			continue
 		}
+		result = append(result, SessionCookie{
+			Name:     cookie.Name,
+			Value:    cookie.Value,
+			Path:     cookie.Path,
+			Domain:   cookie.Domain,
+			Expires:  cookie.Expires,
+			MaxAge:   cookie.MaxAge,
+			Secure:   cookie.Secure,
+			HTTPOnly: cookie.HttpOnly,
+			SameSite: int(cookie.SameSite),
+		})
 	}
-
-	defaultCookiePath := strings.TrimSpace(authConfig.DefaultCookiePath)
-	if defaultCookiePath != "" {
-		cookieString, err := loadCookiesFromFile(defaultCookiePath)
-		if err != nil {
-			attemptErrors = append(attemptErrors, fmt.Sprintf("default path %q: %v", defaultCookiePath, err))
-		} else {
-			cookies, parseErr := parseCookieString(cookieString, fmt.Sprintf("default file %q", defaultCookiePath))
-			if parseErr != nil {
-				attemptErrors = append(attemptErrors, fmt.Sprintf("default path %q: %v", defaultCookiePath, parseErr))
-			} else {
-				return cookies, "default-path", nil
-			}
-		}
-	}
-
-	if len(attemptErrors) == 0 {
-		return nil, "", fmt.Errorf("no valid cookie source configured; provide --cookie-file, --cookie-env, or a default cookie path")
-	}
-
-	return nil, "", fmt.Errorf("no valid cookie source available: %s", strings.Join(attemptErrors, "; "))
+	return result
 }
 
 func trimDate(value string) string {

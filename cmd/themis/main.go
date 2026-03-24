@@ -22,7 +22,6 @@ const defaultBaseURL = "https://themis.housing.rug.nl"
 type commonFlags struct {
 	baseURL           string
 	cookieFile        string
-	cookieEnv         string
 	defaultCookiePath string
 	jsonOutput        bool
 }
@@ -77,9 +76,7 @@ func runCheck(args []string) {
 	}
 
 	session, err := themis.NewSessionWithAuthConfig(common.baseURL, themis.AuthConfig{
-		CookieFile:        common.cookieFile,
-		CookieEnv:         common.cookieEnv,
-		DefaultCookiePath: common.defaultCookiePath,
+		SessionFile: resolveSessionFilePath(*common),
 	})
 	if err != nil {
 		fail(err, common.jsonOutput, common.baseURL)
@@ -174,9 +171,7 @@ func runList(args []string) {
 	}
 
 	session, err := themis.NewSessionWithAuthConfig(common.baseURL, themis.AuthConfig{
-		CookieFile:        common.cookieFile,
-		CookieEnv:         common.cookieEnv,
-		DefaultCookiePath: common.defaultCookiePath,
+		SessionFile: resolveSessionFilePath(*common),
 	})
 	if err != nil {
 		fail(err, common.jsonOutput, common.baseURL)
@@ -231,9 +226,7 @@ func runFetch(args []string) {
 	}
 
 	session, err := themis.NewSessionWithAuthConfig(common.baseURL, themis.AuthConfig{
-		CookieFile:        common.cookieFile,
-		CookieEnv:         common.cookieEnv,
-		DefaultCookiePath: common.defaultCookiePath,
+		SessionFile: resolveSessionFilePath(*common),
 	})
 	if err != nil {
 		fail(err, common.jsonOutput, common.baseURL)
@@ -319,9 +312,7 @@ func runDiscoverStateFirst(opts discoverOptions) (commandResult, []discovery.Ass
 
 		if opts.fullRefresh || strings.TrimSpace(opts.refreshURL) != "" || needBootstrap {
 			session, err := themis.NewSessionWithAuthConfig(baseURL, themis.AuthConfig{
-				CookieFile:        opts.common.cookieFile,
-				CookieEnv:         opts.common.cookieEnv,
-				DefaultCookiePath: opts.common.defaultCookiePath,
+				SessionFile: resolveSessionFilePath(opts.common),
 			})
 			if err != nil {
 				return commandResult{}, nil, err
@@ -647,9 +638,7 @@ func runTUI(args []string) {
 			return out
 		}
 		session, err := themis.NewSessionWithAuthConfig(baseURL, themis.AuthConfig{
-			CookieFile:        common.cookieFile,
-			CookieEnv:         common.cookieEnv,
-			DefaultCookiePath: common.defaultCookiePath,
+			SessionFile: resolveSessionFilePath(*common),
 		})
 		if err != nil {
 			out.Err = err
@@ -705,9 +694,7 @@ func runTUI(args []string) {
 			return out
 		}
 		session, err := themis.NewSessionWithAuthConfig(baseURL, themis.AuthConfig{
-			CookieFile:        common.cookieFile,
-			CookieEnv:         common.cookieEnv,
-			DefaultCookiePath: common.defaultCookiePath,
+			SessionFile: resolveSessionFilePath(*common),
 		})
 		if err != nil {
 			out.Err = err
@@ -778,14 +765,12 @@ func findRepoRoot(start string) (string, error) {
 func addCommonFlags(fs *flag.FlagSet) *commonFlags {
 	common := &commonFlags{}
 
-	defaultCookiePath := filepath.Join(mustUserHomeDir(), ".config", "themis", "cookie.txt")
+	defaultCookiePath := filepath.Join(mustUserHomeDir(), ".config", "themis", "session.json")
 	defaultCookieFile := defaultFromEnv("THEMIS_COOKIE_FILE", defaultFromEnv("THEMIS_COOKIE_PATH", ""))
-	defaultCookieEnv := defaultFromEnv("THEMIS_COOKIE_ENV", "THEMIS_COOKIE")
 	defaultBase := defaultFromEnv("THEMIS_BASE_URL", defaultBaseURL)
 
 	fs.StringVar(&common.baseURL, "base-url", defaultBase, "Themis base URL")
 	fs.StringVar(&common.cookieFile, "cookie-file", defaultCookieFile, "Path to cookie file")
-	fs.StringVar(&common.cookieEnv, "cookie-env", defaultCookieEnv, "Name of env var containing cookie string")
 	common.defaultCookiePath = defaultCookiePath
 	fs.BoolVar(&common.jsonOutput, "json", false, "Output JSON")
 
@@ -812,7 +797,6 @@ func printUsage() {
 	fmt.Println("Common flags (all subcommands):")
 	fmt.Println("  --base-url <url>")
 	fmt.Println("  --cookie-file <path>")
-	fmt.Println("  --cookie-env <env-var-name>")
 	fmt.Println("  --json")
 	fmt.Println()
 	fmt.Println("Subcommand flags:")
@@ -903,4 +887,12 @@ func resolveOutputDir(outFlag string, targetAlias string) (string, error) {
 		return "", fmt.Errorf("failed to resolve output path %q: %w", selected, err)
 	}
 	return resolved, nil
+}
+
+func resolveSessionFilePath(common commonFlags) string {
+	candidate := strings.TrimSpace(common.cookieFile)
+	if candidate != "" {
+		return candidate
+	}
+	return strings.TrimSpace(common.defaultCookiePath)
 }
