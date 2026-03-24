@@ -62,6 +62,8 @@ func main() {
 		runProject(args[1:])
 	case "login":
 		runLogin(args[1:])
+	case "auth":
+		runAuth(args[1:])
 	case "tui":
 		runAppTUI(args[1:])
 	case "-h", "--help", "help":
@@ -620,17 +622,16 @@ func runLogin(args []string) {
 
 func runInteractiveLogin(common commonFlags) error {
 	prefill := loginui.Prefill{}
-	sessionState, err := themis.LoadSessionState(common.sessionFile)
-	if err == nil {
-		prefill.Username = strings.TrimSpace(sessionState.Auth.Username)
-		if sessionState.Auth.SavePassword {
-			prefill.Password = sessionState.Auth.Password
-		}
-		prefill.SaveUsername = sessionState.Auth.SaveUsername
-		prefill.SavePassword = sessionState.Auth.SavePassword
-	} else if !errors.Is(err, os.ErrNotExist) && !errors.Is(err, themis.ErrNotAuthenticated) {
+	authSettings, err := themis.LoadAuthSettings(common.sessionFile)
+	if err != nil {
 		return err
 	}
+	prefill.Username = strings.TrimSpace(authSettings.Username)
+	if authSettings.SavePassword {
+		prefill.Password = authSettings.Password
+	}
+	prefill.SaveUsername = authSettings.SaveUsername
+	prefill.SavePassword = authSettings.SavePassword
 
 	_, err = loginui.Run(prefill, func(req loginui.SubmitRequest) (loginui.SubmitResult, error) {
 		result, loginErr := themis.PerformSSOLogin(common.baseURL, themis.AuthConfig{SessionFile: common.sessionFile}, themis.LoginRequest{
@@ -652,69 +653,157 @@ func runInteractiveLogin(common commonFlags) error {
 }
 
 func runNonInteractiveLogin(common commonFlags, inputs loginInputs) (themis.UserData, string, error) {
+	sessionBaseURL := common.baseURL
 	session, err := themis.NewSessionWithAuthConfig(common.baseURL, themis.AuthConfig{
 		SessionFile: common.sessionFile,
 	})
-	if err != nil {
-		if errors.Is(err, themis.ErrNotAuthenticated) {
-			return themis.UserData{}, common.baseURL, fmt.Errorf("%w: no reusable session found and non-interactive SSO login is not implemented yet", err)
-		}
-		return themis.UserData{}, common.baseURL, err
-	}
-
-	userData, err := session.ValidateAuthentication()
 	if err == nil {
-		return userData, session.BaseURL, nil
-	}
-	if !errors.Is(err, themis.ErrSessionExpired) && !errors.Is(err, themis.ErrNotAuthenticated) {
-		return themis.UserData{}, session.BaseURL, err
+		sessionBaseURL = session.BaseURL
+		userData, err := session.ValidateAuthentication()
+		if err == nil {
+			return userData, sessionBaseURL, nil
+		}
+		if !errors.Is(err, themis.ErrSessionExpired) && !errors.Is(err, themis.ErrNotAuthenticated) {
+			return themis.UserData{}, sessionBaseURL, err
+		}
+	} else if !errors.Is(err, themis.ErrNotAuthenticated) && !errors.Is(err, themis.ErrSessionExpired) {
+		return themis.UserData{}, sessionBaseURL, err
 	}
 
 	mergedCreds, mergeErr := resolveNonInteractiveCredentials(common.sessionFile, inputs)
 	if mergeErr != nil {
-		return themis.UserData{}, session.BaseURL, mergeErr
+		return themis.UserData{}, sessionBaseURL, mergeErr
 	}
 	if mergedCreds.username == "" {
-		return themis.UserData{}, session.BaseURL, fmt.Errorf("%w: username is required for non-interactive login", themis.ErrMissingCredentials)
+		return themis.UserData{}, sessionBaseURL, fmt.Errorf("%w: username is required for non-interactive login", themis.ErrMissingCredentials)
 	}
 	if mergedCreds.password == "" {
-		return themis.UserData{}, session.BaseURL, fmt.Errorf("%w: password is required for non-interactive login", themis.ErrMissingCredentials)
+		return themis.UserData{}, sessionBaseURL, fmt.Errorf("%w: password is required for non-interactive login", themis.ErrMissingCredentials)
 	}
 	if mergedCreds.totp == "" {
-		return themis.UserData{}, session.BaseURL, fmt.Errorf("%w: --totp is required for non-interactive login", themis.ErrMissingCredentials)
+		return themis.UserData{}, sessionBaseURL, fmt.Errorf("%w: --totp is required for non-interactive login", themis.ErrMissingCredentials)
 	}
 
-	loginResult, err := themis.PerformSSOLogin(session.BaseURL, themis.AuthConfig{SessionFile: common.sessionFile}, themis.LoginRequest{
+	saveUsername, savePassword, prefsErr := loadSavedAuthPreferences(common.sessionFile)
+	if prefsErr != nil {
+		return themis.UserData{}, sessionBaseURL, prefsErr
+	}
+
+	loginResult, err := themis.PerformSSOLogin(sessionBaseURL, themis.AuthConfig{SessionFile: common.sessionFile}, themis.LoginRequest{
 		Username:     mergedCreds.username,
 		Password:     mergedCreds.password,
 		TOTP:         mergedCreds.totp,
-		SaveUsername: true,
-		SavePassword: true,
+		SaveUsername: saveUsername,
+		SavePassword: savePassword,
 	})
 	if err != nil {
-		return themis.UserData{}, session.BaseURL, err
+		return themis.UserData{}, sessionBaseURL, err
 	}
 
-	return loginResult.User, session.BaseURL, nil
+	return loginResult.User, sessionBaseURL, nil
 }
 
 func resolveNonInteractiveCredentials(sessionFile string, inputs loginInputs) (loginInputs, error) {
 	merged := inputs
-	state, err := themis.LoadSessionState(sessionFile)
+	auth, err := themis.LoadAuthSettings(sessionFile)
 	if err != nil {
-		if errors.Is(err, os.ErrNotExist) || errors.Is(err, themis.ErrNotAuthenticated) {
-			return merged, nil
-		}
 		return merged, err
 	}
 
-	if merged.username == "" && state.Auth.SaveUsername {
-		merged.username = strings.TrimSpace(state.Auth.Username)
+	if merged.username == "" && auth.SaveUsername {
+		merged.username = strings.TrimSpace(auth.Username)
 	}
-	if merged.password == "" && state.Auth.SavePassword {
-		merged.password = strings.TrimSpace(state.Auth.Password)
+	if merged.password == "" && auth.SavePassword {
+		merged.password = strings.TrimSpace(auth.Password)
 	}
 	return merged, nil
+}
+
+func loadSavedAuthPreferences(sessionFile string) (bool, bool, error) {
+	auth, err := themis.LoadAuthSettings(sessionFile)
+	if err != nil {
+		return false, false, err
+	}
+	return auth.SaveUsername, auth.SavePassword, nil
+}
+
+func runAuth(args []string) {
+	jsonRequested := wantsJSON(args)
+	fs := newFlagSet("auth")
+	common := addCommonFlags(fs)
+	username := fs.String("username", "", "Set saved username")
+	password := fs.String("password", "", "Set saved password")
+	saveUsername := fs.Bool("save-username", false, "Persist username in auth settings")
+	savePassword := fs.Bool("save-password", false, "Persist password in auth settings")
+	clearUsername := fs.Bool("clear-username", false, "Clear saved username (also clears password)")
+	clearPassword := fs.Bool("clear-password", false, "Clear saved password")
+	if err := fs.Parse(args); err != nil {
+		fail(err, jsonRequested, "")
+	}
+
+	visited := map[string]bool{}
+	fs.Visit(func(f *flag.Flag) {
+		visited[f.Name] = true
+	})
+	mutating := visited["username"] || visited["password"] || visited["save-username"] || visited["save-password"] || *clearUsername || *clearPassword
+
+	auth, err := themis.LoadAuthSettings(common.sessionFile)
+	if err != nil {
+		fail(err, common.jsonOutput, common.baseURL)
+	}
+
+	if mutating {
+		if visited["username"] {
+			auth.Username = strings.TrimSpace(*username)
+		}
+		if visited["password"] {
+			auth.Password = *password
+		}
+		if visited["save-username"] {
+			auth.SaveUsername = *saveUsername
+		}
+		if visited["save-password"] {
+			auth.SavePassword = *savePassword
+		}
+		if *clearUsername {
+			auth.Username = ""
+			auth.SaveUsername = false
+			auth.SavePassword = false
+			auth.Password = ""
+		}
+		if *clearPassword {
+			auth.Password = ""
+			auth.SavePassword = false
+		}
+
+		if err := themis.SaveAuthSettings(common.sessionFile, auth); err != nil {
+			fail(err, common.jsonOutput, common.baseURL)
+		}
+		auth, err = themis.LoadAuthSettings(common.sessionFile)
+		if err != nil {
+			fail(err, common.jsonOutput, common.baseURL)
+		}
+	}
+
+	if common.jsonOutput {
+		writeJSON(map[string]any{
+			"status":        "ok",
+			"base_url":      common.baseURL,
+			"session_file":  common.sessionFile,
+			"auth_settings": map[string]any{"username": auth.Username, "save_username": auth.SaveUsername, "save_password": auth.SavePassword, "password_stored": auth.Password != ""},
+		})
+		return
+	}
+
+	fmt.Printf("Auth settings (%s):\n", common.sessionFile)
+	if auth.Username == "" {
+		fmt.Println("  username: <empty>")
+	} else {
+		fmt.Printf("  username: %s\n", auth.Username)
+	}
+	fmt.Printf("  save_username: %t\n", auth.SaveUsername)
+	fmt.Printf("  save_password: %t\n", auth.SavePassword)
+	fmt.Printf("  password_stored: %t\n", auth.Password != "")
 }
 
 func ensureInteractiveSession(common commonFlags) error {
@@ -987,6 +1076,7 @@ func printUsage() {
 	fmt.Println("  list   List available test case indices")
 	fmt.Println("  fetch  Download available test cases")
 	fmt.Println("  login  Authenticate interactively or non-interactively")
+	fmt.Println("  auth   View or update global auth settings")
 	fmt.Println("  project Manage repository link metadata")
 	fmt.Println("  tui    Alias for `themis` (deprecated)")
 	fmt.Println()
@@ -1000,6 +1090,7 @@ func printUsage() {
 	fmt.Println("  list  --discover [--root-url <url>] [--discover-depth <n>] [--refresh-url <url>] [--refresh-depth <n>] [--full-refresh] [--from-state-only]")
 	fmt.Println("  fetch --tests-url <url> [--out <dir>]")
 	fmt.Println("  login [--username <value>] [--password <value>] [--totp <value>]")
+	fmt.Println("  auth [--username <value>] [--password <value>] [--save-username=<bool>] [--save-password=<bool>] [--clear-username] [--clear-password]")
 	fmt.Println("  project link --root-url <url> [--default-refresh-depth <n>]")
 	fmt.Println("  themis [--root-url <url>]")
 }
