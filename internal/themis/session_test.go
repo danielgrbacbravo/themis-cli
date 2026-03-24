@@ -1,6 +1,8 @@
 package themis
 
 import (
+	"errors"
+	"fmt"
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
@@ -182,5 +184,19 @@ func TestSessionSaveState_WritesBaseURLCookieScope(t *testing.T) {
 	}
 	if len(state.Cookies) != 1 || state.Cookies[0].URL != "https://themis.housing.rug.nl" {
 		t.Fatalf("unexpected cookie scopes: %#v", state.Cookies)
+	}
+}
+
+func TestClassifyLoadSessionError_NotExist(t *testing.T) {
+	err := classifyLoadSessionError(fmt.Errorf("read session file: %w", os.ErrNotExist))
+	if !errors.Is(err, ErrNotAuthenticated) {
+		t.Fatalf("expected ErrNotAuthenticated, got: %v", err)
+	}
+}
+
+func TestClassifyLoadSessionError_EmptySession(t *testing.T) {
+	err := classifyLoadSessionError(fmt.Errorf("session file is empty: /tmp/session.json"))
+	if !errors.Is(err, ErrNotAuthenticated) {
+		t.Fatalf("expected ErrNotAuthenticated, got: %v", err)
 	}
 }

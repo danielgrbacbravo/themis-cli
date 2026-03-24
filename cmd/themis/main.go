@@ -44,25 +44,29 @@ type commandResult struct {
 }
 
 func main() {
-	if len(os.Args) < 2 {
-		fail(fmt.Errorf("missing subcommand"), wantsJSON(os.Args[1:]), "")
+	args := os.Args[1:]
+	if len(args) == 0 || strings.HasPrefix(args[0], "-") {
+		runAppTUI(args)
+		return
 	}
 
-	switch os.Args[1] {
+	switch args[0] {
 	case "check":
-		runCheck(os.Args[2:])
+		runCheck(args[1:])
 	case "list":
-		runList(os.Args[2:])
+		runList(args[1:])
 	case "fetch":
-		runFetch(os.Args[2:])
+		runFetch(args[1:])
 	case "project":
-		runProject(os.Args[2:])
+		runProject(args[1:])
+	case "login":
+		runLogin(args[1:])
 	case "tui":
-		runTUI(os.Args[2:])
+		runAppTUI(args[1:])
 	case "-h", "--help", "help":
 		printUsage()
 	default:
-		fail(fmt.Errorf("unknown subcommand: %s", os.Args[1]), wantsJSON(os.Args[2:]), "")
+		fail(fmt.Errorf("unknown subcommand: %s", args[0]), wantsJSON(args[1:]), "")
 	}
 }
 
@@ -556,9 +560,155 @@ func runProjectLink(args []string) {
 	fmt.Printf("Saved project config at %s\n", cfgPath)
 }
 
-func runTUI(args []string) {
+type loginInputs struct {
+	username string
+	password string
+	totp     string
+}
+
+func runLogin(args []string) {
 	jsonRequested := wantsJSON(args)
-	fs := newFlagSet("tui")
+	fs := newFlagSet("login")
+	common := addCommonFlags(fs)
+	username := fs.String("username", "", "Username for non-interactive login")
+	password := fs.String("password", "", "Password for non-interactive login")
+	totp := fs.String("totp", "", "TOTP code for non-interactive login")
+	if err := fs.Parse(args); err != nil {
+		fail(err, jsonRequested, "")
+	}
+
+	inputs := loginInputs{
+		username: strings.TrimSpace(*username),
+		password: strings.TrimSpace(*password),
+		totp:     strings.TrimSpace(*totp),
+	}
+	nonInteractive := inputs.username != "" || inputs.password != "" || inputs.totp != ""
+
+	if !nonInteractive {
+		if common.jsonOutput {
+			fail(fmt.Errorf("--json is not supported for interactive login"), false, "")
+		}
+		if err := runInteractiveLogin(*common); err != nil {
+			fail(err, false, common.baseURL)
+		}
+		fmt.Println("Login successful.")
+		return
+	}
+
+	userData, sessionBaseURL, err := runNonInteractiveLogin(*common, inputs)
+	if err != nil {
+		fail(err, common.jsonOutput, sessionBaseURL)
+	}
+
+	if common.jsonOutput {
+		writeJSON(commandResult{
+			Status:        "ok",
+			BaseURL:       sessionBaseURL,
+			Mode:          "non-interactive-login",
+			Tests:         []int{},
+			Downloaded:    0,
+			Files:         []any{},
+			Authenticated: true,
+			User:          userData,
+		})
+		return
+	}
+
+	fmt.Printf("OK: authenticated as %s (%s)\n", userData.FullName, userData.Email)
+}
+
+func runInteractiveLogin(common commonFlags) error {
+	return fmt.Errorf("interactive login TUI is not implemented yet")
+}
+
+func runNonInteractiveLogin(common commonFlags, inputs loginInputs) (themis.UserData, string, error) {
+	session, err := themis.NewSessionWithAuthConfig(common.baseURL, themis.AuthConfig{
+		SessionFile: common.sessionFile,
+	})
+	if err != nil {
+		if errors.Is(err, themis.ErrNotAuthenticated) {
+			return themis.UserData{}, common.baseURL, fmt.Errorf("%w: no reusable session found and non-interactive SSO login is not implemented yet", err)
+		}
+		return themis.UserData{}, common.baseURL, err
+	}
+
+	userData, err := session.ValidateAuthentication()
+	if err == nil {
+		return userData, session.BaseURL, nil
+	}
+	if !errors.Is(err, themis.ErrSessionExpired) && !errors.Is(err, themis.ErrNotAuthenticated) {
+		return themis.UserData{}, session.BaseURL, err
+	}
+
+	mergedCreds, mergeErr := resolveNonInteractiveCredentials(common.sessionFile, inputs)
+	if mergeErr != nil {
+		return themis.UserData{}, session.BaseURL, mergeErr
+	}
+	if mergedCreds.username == "" {
+		return themis.UserData{}, session.BaseURL, fmt.Errorf("%w: username is required for non-interactive login", themis.ErrMissingCredentials)
+	}
+	if mergedCreds.password == "" {
+		return themis.UserData{}, session.BaseURL, fmt.Errorf("%w: password is required for non-interactive login", themis.ErrMissingCredentials)
+	}
+	if mergedCreds.totp == "" {
+		return themis.UserData{}, session.BaseURL, fmt.Errorf("%w: --totp is required for non-interactive login", themis.ErrMissingCredentials)
+	}
+
+	return themis.UserData{}, session.BaseURL, fmt.Errorf("non-interactive SSO login is not implemented yet")
+}
+
+func resolveNonInteractiveCredentials(sessionFile string, inputs loginInputs) (loginInputs, error) {
+	merged := inputs
+	state, err := themis.LoadSessionState(sessionFile)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) || errors.Is(err, themis.ErrNotAuthenticated) {
+			return merged, nil
+		}
+		return merged, err
+	}
+
+	if merged.username == "" && state.Auth.SaveUsername {
+		merged.username = strings.TrimSpace(state.Auth.Username)
+	}
+	if merged.password == "" && state.Auth.SavePassword {
+		merged.password = strings.TrimSpace(state.Auth.Password)
+	}
+	return merged, nil
+}
+
+func ensureInteractiveSession(common commonFlags) error {
+	session, err := themis.NewSessionWithAuthConfig(common.baseURL, themis.AuthConfig{
+		SessionFile: common.sessionFile,
+	})
+	if err == nil {
+		if _, err := session.ValidateAuthentication(); err == nil {
+			return nil
+		} else if !errors.Is(err, themis.ErrSessionExpired) && !errors.Is(err, themis.ErrNotAuthenticated) {
+			return err
+		}
+	} else if !errors.Is(err, themis.ErrSessionExpired) && !errors.Is(err, themis.ErrNotAuthenticated) {
+		return err
+	}
+
+	if err := runInteractiveLogin(common); err != nil {
+		return err
+	}
+
+	session, err = themis.NewSessionWithAuthConfig(common.baseURL, themis.AuthConfig{
+		SessionFile: common.sessionFile,
+	})
+	if err != nil {
+		return err
+	}
+	if _, err := session.ValidateAuthentication(); err != nil {
+		return err
+	}
+	return nil
+}
+
+func runAppTUI(args []string) {
+	jsonRequested := wantsJSON(args)
+	fs := newFlagSet("themis")
 	common := addCommonFlags(fs)
 	rootURL := fs.String("root-url", "", "Optional root URL to focus in TUI")
 	if err := fs.Parse(args); err != nil {
@@ -566,6 +716,9 @@ func runTUI(args []string) {
 	}
 	if jsonRequested {
 		fail(fmt.Errorf("--json is not supported for interactive tui"), false, "")
+	}
+	if err := ensureInteractiveSession(*common); err != nil {
+		fail(err, false, common.baseURL)
 	}
 
 	statePath, err := state.DefaultStatePath()
@@ -782,14 +935,19 @@ func newFlagSet(name string) *flag.FlagSet {
 
 func printUsage() {
 	fmt.Println("Usage:")
+	fmt.Println("  themis")
 	fmt.Println("  themis <subcommand> [flags]")
+	fmt.Println()
+	fmt.Println("Default:")
+	fmt.Println("  themis  Open the interactive TUI app")
 	fmt.Println()
 	fmt.Println("Subcommands:")
 	fmt.Println("  check  Validate authentication and base URL access")
 	fmt.Println("  list   List available test case indices")
 	fmt.Println("  fetch  Download available test cases")
+	fmt.Println("  login  Authenticate interactively or non-interactively")
 	fmt.Println("  project Manage repository link metadata")
-	fmt.Println("  tui    Browse cached hierarchy and trigger targeted refresh actions")
+	fmt.Println("  tui    Alias for `themis` (deprecated)")
 	fmt.Println()
 	fmt.Println("Common flags (all subcommands):")
 	fmt.Println("  --base-url <url>")
@@ -800,8 +958,9 @@ func printUsage() {
 	fmt.Println("  list  --tests-url <url> [--start <n>] [--max <n>] [--max-misses <n>]")
 	fmt.Println("  list  --discover [--root-url <url>] [--discover-depth <n>] [--refresh-url <url>] [--refresh-depth <n>] [--full-refresh] [--from-state-only]")
 	fmt.Println("  fetch --tests-url <url> [--out <dir>]")
+	fmt.Println("  login [--username <value>] [--password <value>] [--totp <value>]")
 	fmt.Println("  project link --root-url <url> [--default-refresh-depth <n>]")
-	fmt.Println("  tui [--root-url <url>]")
+	fmt.Println("  themis [--root-url <url>]")
 }
 
 func fail(err error, asJSON bool, baseURL string) {

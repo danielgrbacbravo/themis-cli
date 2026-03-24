@@ -2,6 +2,7 @@ package themis
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -17,6 +18,13 @@ import (
 
 const userDataRoute = "/user"
 const sessionFileSchemaVersion = 1
+
+var (
+	ErrNotAuthenticated   = errors.New("not authenticated")
+	ErrSessionExpired     = errors.New("session expired")
+	ErrMissingCredentials = errors.New("missing credentials")
+	ErrInvalidMFA         = errors.New("invalid mfa")
+)
 
 type Session struct {
 	BaseURL string
@@ -61,11 +69,11 @@ func NewSessionWithAuthConfig(baseURL string, authConfig AuthConfig) (*Session, 
 
 	sessionState, err := loadSessionState(sessionFilePath)
 	if err != nil {
-		return nil, err
+		return nil, classifyLoadSessionError(err)
 	}
 
 	if err := restoreCookieJar(client.Jar, parsedBaseURL, sessionState); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%w: %v", ErrNotAuthenticated, err)
 	}
 
 	return &Session{
@@ -118,7 +126,7 @@ func (s *Session) ValidateAuthentication() (UserData, error) {
 		return UserData{}, err
 	}
 	if userData.FullName == "" {
-		return UserData{}, fmt.Errorf("authentication check failed: no user profile data found")
+		return UserData{}, fmt.Errorf("%w: authentication check failed: no user profile data found", ErrSessionExpired)
 	}
 	return userData, nil
 }
@@ -133,6 +141,9 @@ func (s *Session) getDataFromUserPage() (*goquery.Document, int, error) {
 	doc, err := goquery.NewDocumentFromReader(resp.Body)
 	if err != nil {
 		return nil, resp.StatusCode, fmt.Errorf("error parsing user data page: %w", err)
+	}
+	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+		return nil, resp.StatusCode, fmt.Errorf("%w: user endpoint returned status %d", ErrSessionExpired, resp.StatusCode)
 	}
 	return doc, resp.StatusCode, nil
 }
@@ -199,6 +210,17 @@ func loadSessionState(path string) (SessionState, error) {
 		sessionState.Cookies = []SessionCookieScope{}
 	}
 	return sessionState, nil
+}
+
+func LoadSessionState(path string) (SessionState, error) {
+	if strings.TrimSpace(path) == "" {
+		var err error
+		path, err = DefaultSessionFilePath()
+		if err != nil {
+			return SessionState{}, err
+		}
+	}
+	return loadSessionState(path)
 }
 
 func SaveSessionState(path string, state SessionState) error {
@@ -401,4 +423,15 @@ func trimDate(value string) string {
 		return value
 	}
 	return value[:15]
+}
+
+func classifyLoadSessionError(err error) error {
+	if errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("%w: %v", ErrNotAuthenticated, err)
+	}
+	msg := strings.ToLower(err.Error())
+	if strings.Contains(msg, "session file is empty") || strings.Contains(msg, "session file has no cookies") {
+		return fmt.Errorf("%w: %v", ErrNotAuthenticated, err)
+	}
+	return err
 }
