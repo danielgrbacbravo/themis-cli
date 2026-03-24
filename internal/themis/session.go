@@ -17,6 +17,7 @@ import (
 )
 
 const userDataRoute = "/user"
+const courseRoute = "/course/"
 const sessionFileSchemaVersion = 1
 
 var (
@@ -99,18 +100,13 @@ func (s *Session) GetUserData() (UserData, error) {
 		return UserData{}, fmt.Errorf("user endpoint returned status %d", statusCode)
 	}
 
-	userData := make(map[string]string)
-	doc.Find("section.border.accent div.cfg-container div.cfg-line").Each(func(i int, sel *goquery.Selection) {
-		key := strings.TrimSpace(sel.Find("span.cfg-key").Text())
-		value := strings.TrimSpace(sel.Find("span.cfg-val").Text())
-		userData[key] = value
-	})
+	userData := extractUserDataFields(doc)
 
 	return UserData{
-		FullName:      userData["Full name:"],
-		Email:         userData["Email:"],
-		FirstLoggedIn: trimDate(userData["First login:"]),
-		LastLoggedIn:  trimDate(userData["Last login:"]),
+		FullName:      firstNonEmpty(userData["full name"], userData["name"]),
+		Email:         userData["email"],
+		FirstLoggedIn: trimDate(userData["first login"]),
+		LastLoggedIn:  trimDate(userData["last login"]),
 	}, nil
 }
 
@@ -129,14 +125,28 @@ func (s *Session) CheckBaseURLAccess() error {
 }
 
 func (s *Session) ValidateAuthentication() (UserData, error) {
-	userData, err := s.GetUserData()
+	courseIdentity, err := s.getAuthenticatedIdentityFromCoursePage()
 	if err != nil {
 		return UserData{}, err
 	}
-	if userData.FullName == "" {
-		return UserData{}, fmt.Errorf("%w: authentication check failed: no user profile data found", ErrSessionExpired)
+
+	userData, err := s.GetUserData()
+	if err == nil {
+		if strings.TrimSpace(userData.FullName) == "" {
+			userData.FullName = courseIdentity.FullName
+		}
+		if strings.TrimSpace(userData.Email) == "" {
+			userData.Email = courseIdentity.Email
+		}
+		if strings.TrimSpace(userData.FullName) != "" {
+			return userData, nil
+		}
 	}
-	return userData, nil
+
+	if strings.TrimSpace(courseIdentity.FullName) == "" {
+		return UserData{}, fmt.Errorf("%w: authentication check failed: no authenticated user anchor found on %s", ErrSessionExpired, courseRoute)
+	}
+	return courseIdentity, nil
 }
 
 func (s *Session) getDataFromUserPage() (*goquery.Document, int, error) {
@@ -154,6 +164,90 @@ func (s *Session) getDataFromUserPage() (*goquery.Document, int, error) {
 		return nil, resp.StatusCode, fmt.Errorf("%w: user endpoint returned status %d", ErrSessionExpired, resp.StatusCode)
 	}
 	return doc, resp.StatusCode, nil
+}
+
+func (s *Session) getAuthenticatedIdentityFromCoursePage() (UserData, error) {
+	resp, err := s.Client.Get(s.BaseURL + courseRoute)
+	if err != nil {
+		return UserData{}, fmt.Errorf("error fetching course page: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+		return UserData{}, fmt.Errorf("%w: course endpoint returned status %d", ErrSessionExpired, resp.StatusCode)
+	}
+	if resp.StatusCode >= http.StatusBadRequest {
+		return UserData{}, fmt.Errorf("course endpoint returned status %d", resp.StatusCode)
+	}
+
+	doc, err := goquery.NewDocumentFromReader(resp.Body)
+	if err != nil {
+		return UserData{}, fmt.Errorf("error parsing course page: %w", err)
+	}
+
+	anchorText := findUserAnchorText(doc)
+	if strings.TrimSpace(anchorText) == "" {
+		return UserData{}, fmt.Errorf("%w: no user anchor found on %s", ErrSessionExpired, courseRoute)
+	}
+
+	return UserData{FullName: anchorText}, nil
+}
+
+func findUserAnchorText(doc *goquery.Document) string {
+	text := ""
+	doc.Find("a").EachWithBreak(func(_ int, sel *goquery.Selection) bool {
+		href := strings.TrimSpace(sel.AttrOr("href", ""))
+		if !isUserHref(href) {
+			return true
+		}
+		value := strings.TrimSpace(sel.Text())
+		if value == "" {
+			return true
+		}
+		text = strings.Join(strings.Fields(value), " ")
+		return false
+	})
+	return text
+}
+
+func isUserHref(href string) bool {
+	if href == "" {
+		return false
+	}
+	u, err := url.Parse(href)
+	if err != nil {
+		return false
+	}
+	path := strings.TrimRight(strings.TrimSpace(u.Path), "/")
+	return path == "/user"
+}
+
+func extractUserDataFields(doc *goquery.Document) map[string]string {
+	fields := map[string]string{}
+	doc.Find("div.cfg-line").Each(func(_ int, sel *goquery.Selection) {
+		key := normalizeProfileKey(sel.Find("span.cfg-key").Text())
+		value := strings.TrimSpace(sel.Find("span.cfg-val").Text())
+		if key == "" || value == "" {
+			return
+		}
+		fields[key] = value
+	})
+	return fields
+}
+
+func normalizeProfileKey(key string) string {
+	key = strings.TrimSpace(strings.TrimSuffix(key, ":"))
+	key = strings.ToLower(key)
+	return strings.Join(strings.Fields(key), " ")
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return value
+		}
+	}
+	return ""
 }
 
 func initializeHTTPClient() (*http.Client, error) {

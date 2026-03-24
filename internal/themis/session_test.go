@@ -258,12 +258,83 @@ func TestNewSessionWithAuthConfig_ExpiredSession(t *testing.T) {
 	}
 }
 
+func TestNewSessionWithAuthConfig_CourseAnchorFallback(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/":
+			w.WriteHeader(http.StatusOK)
+			_, _ = io.WriteString(w, "ok")
+		case "/course/":
+			cookie, err := r.Cookie("session")
+			if err != nil || cookie.Value != "ok" {
+				w.WriteHeader(http.StatusUnauthorized)
+				_, _ = io.WriteString(w, "unauthorized")
+				return
+			}
+			w.WriteHeader(http.StatusOK)
+			_, _ = io.WriteString(w, `<html><body><a href="/user">Alice Example (s1234567)</a></body></html>`)
+		case "/user":
+			cookie, err := r.Cookie("session")
+			if err != nil || cookie.Value != "ok" {
+				w.WriteHeader(http.StatusUnauthorized)
+				_, _ = io.WriteString(w, "unauthorized")
+				return
+			}
+			w.WriteHeader(http.StatusOK)
+			_, _ = io.WriteString(w, `<html><body><h1>User</h1><p>No cfg-line data</p></body></html>`)
+		default:
+			w.WriteHeader(http.StatusNotFound)
+			_, _ = io.WriteString(w, "not found")
+		}
+	}))
+	defer server.Close()
+
+	path := filepath.Join(t.TempDir(), "session.json")
+	if err := SaveSessionState(path, SessionState{
+		SchemaVersion: 1,
+		BaseURL:       server.URL,
+		Cookies: []SessionCookieScope{
+			{
+				URL: server.URL,
+				Cookies: []SessionCookie{
+					{Name: "session", Value: "ok"},
+				},
+			},
+		},
+	}); err != nil {
+		t.Fatalf("save seed session: %v", err)
+	}
+
+	session, err := NewSessionWithAuthConfig(server.URL, AuthConfig{SessionFile: path})
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+
+	user, err := session.ValidateAuthentication()
+	if err != nil {
+		t.Fatalf("validate auth: %v", err)
+	}
+	if user.FullName == "" {
+		t.Fatalf("expected full name fallback from /course/ user anchor, got: %#v", user)
+	}
+}
+
 func newAuthTestServer() *httptest.Server {
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/":
 			w.WriteHeader(http.StatusOK)
 			_, _ = io.WriteString(w, "ok")
+			return
+		case "/course/":
+			cookie, err := r.Cookie("session")
+			if err != nil || cookie.Value != "ok" {
+				w.WriteHeader(http.StatusUnauthorized)
+				_, _ = io.WriteString(w, "unauthorized")
+				return
+			}
+			w.WriteHeader(http.StatusOK)
+			_, _ = io.WriteString(w, `<html><body><a href="/user">Alice Example (s1234567)</a></body></html>`)
 			return
 		case "/user":
 			cookie, err := r.Cookie("session")

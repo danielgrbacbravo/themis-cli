@@ -622,6 +622,11 @@ func runLogin(args []string) {
 
 func runInteractiveLogin(common commonFlags) error {
 	prefill := loginui.Prefill{}
+	authService, err := themis.NewAuthService(common.baseURL, themis.AuthConfig{SessionFile: common.sessionFile})
+	if err != nil {
+		return err
+	}
+
 	authSettings, err := themis.LoadAuthSettings(common.sessionFile)
 	if err != nil {
 		return err
@@ -634,7 +639,7 @@ func runInteractiveLogin(common commonFlags) error {
 	prefill.SavePassword = authSettings.SavePassword
 
 	_, err = loginui.Run(prefill, func(req loginui.SubmitRequest) (loginui.SubmitResult, error) {
-		result, loginErr := themis.PerformSSOLogin(common.baseURL, themis.AuthConfig{SessionFile: common.sessionFile}, themis.LoginRequest{
+		result, loginErr := authService.Login(themis.LoginRequest{
 			Username:     req.Username,
 			Password:     req.Password,
 			TOTP:         req.TOTP,
@@ -653,78 +658,31 @@ func runInteractiveLogin(common commonFlags) error {
 }
 
 func runNonInteractiveLogin(common commonFlags, inputs loginInputs) (themis.UserData, string, error) {
-	sessionBaseURL := common.baseURL
-	session, err := themis.NewSessionWithAuthConfig(common.baseURL, themis.AuthConfig{
-		SessionFile: common.sessionFile,
-	})
+	authService, err := themis.NewAuthService(common.baseURL, themis.AuthConfig{SessionFile: common.sessionFile})
+	if err != nil {
+		return themis.UserData{}, common.baseURL, err
+	}
+	sessionBaseURL := authService.BaseURL
+
+	_, userData, err := authService.VerifySession()
 	if err == nil {
-		sessionBaseURL = session.BaseURL
-		userData, err := session.ValidateAuthentication()
-		if err == nil {
-			return userData, sessionBaseURL, nil
-		}
-		if !errors.Is(err, themis.ErrSessionExpired) && !errors.Is(err, themis.ErrNotAuthenticated) {
-			return themis.UserData{}, sessionBaseURL, err
-		}
-	} else if !errors.Is(err, themis.ErrNotAuthenticated) && !errors.Is(err, themis.ErrSessionExpired) {
+		return userData, sessionBaseURL, nil
+	}
+	if !errors.Is(err, themis.ErrSessionExpired) && !errors.Is(err, themis.ErrNotAuthenticated) {
 		return themis.UserData{}, sessionBaseURL, err
 	}
 
-	mergedCreds, mergeErr := resolveNonInteractiveCredentials(common.sessionFile, inputs)
-	if mergeErr != nil {
-		return themis.UserData{}, sessionBaseURL, mergeErr
-	}
-	if mergedCreds.username == "" {
-		return themis.UserData{}, sessionBaseURL, fmt.Errorf("%w: username is required for non-interactive login", themis.ErrMissingCredentials)
-	}
-	if mergedCreds.password == "" {
-		return themis.UserData{}, sessionBaseURL, fmt.Errorf("%w: password is required for non-interactive login", themis.ErrMissingCredentials)
-	}
-	if mergedCreds.totp == "" {
-		return themis.UserData{}, sessionBaseURL, fmt.Errorf("%w: --totp is required for non-interactive login", themis.ErrMissingCredentials)
+	loginReq, resolveErr := authService.ResolveLoginRequest(inputs.username, inputs.password, inputs.totp)
+	if resolveErr != nil {
+		return themis.UserData{}, sessionBaseURL, resolveErr
 	}
 
-	saveUsername, savePassword, prefsErr := loadSavedAuthPreferences(common.sessionFile)
-	if prefsErr != nil {
-		return themis.UserData{}, sessionBaseURL, prefsErr
-	}
-
-	loginResult, err := themis.PerformSSOLogin(sessionBaseURL, themis.AuthConfig{SessionFile: common.sessionFile}, themis.LoginRequest{
-		Username:     mergedCreds.username,
-		Password:     mergedCreds.password,
-		TOTP:         mergedCreds.totp,
-		SaveUsername: saveUsername,
-		SavePassword: savePassword,
-	})
+	loginResult, err := authService.Login(loginReq)
 	if err != nil {
 		return themis.UserData{}, sessionBaseURL, err
 	}
 
 	return loginResult.User, sessionBaseURL, nil
-}
-
-func resolveNonInteractiveCredentials(sessionFile string, inputs loginInputs) (loginInputs, error) {
-	merged := inputs
-	auth, err := themis.LoadAuthSettings(sessionFile)
-	if err != nil {
-		return merged, err
-	}
-
-	if merged.username == "" && auth.SaveUsername {
-		merged.username = strings.TrimSpace(auth.Username)
-	}
-	if merged.password == "" && auth.SavePassword {
-		merged.password = strings.TrimSpace(auth.Password)
-	}
-	return merged, nil
-}
-
-func loadSavedAuthPreferences(sessionFile string) (bool, bool, error) {
-	auth, err := themis.LoadAuthSettings(sessionFile)
-	if err != nil {
-		return false, false, err
-	}
-	return auth.SaveUsername, auth.SavePassword, nil
 }
 
 func runAuth(args []string) {
@@ -807,15 +765,13 @@ func runAuth(args []string) {
 }
 
 func ensureInteractiveSession(common commonFlags) error {
-	session, err := themis.NewSessionWithAuthConfig(common.baseURL, themis.AuthConfig{
-		SessionFile: common.sessionFile,
-	})
-	if err == nil {
-		if _, err := session.ValidateAuthentication(); err == nil {
-			return nil
-		} else if !errors.Is(err, themis.ErrSessionExpired) && !errors.Is(err, themis.ErrNotAuthenticated) {
-			return err
-		}
+	authService, err := themis.NewAuthService(common.baseURL, themis.AuthConfig{SessionFile: common.sessionFile})
+	if err != nil {
+		return err
+	}
+
+	if _, _, err := authService.VerifySession(); err == nil {
+		return nil
 	} else if !errors.Is(err, themis.ErrSessionExpired) && !errors.Is(err, themis.ErrNotAuthenticated) {
 		return err
 	}
@@ -824,13 +780,7 @@ func ensureInteractiveSession(common commonFlags) error {
 		return err
 	}
 
-	session, err = themis.NewSessionWithAuthConfig(common.baseURL, themis.AuthConfig{
-		SessionFile: common.sessionFile,
-	})
-	if err != nil {
-		return err
-	}
-	if _, err := session.ValidateAuthentication(); err != nil {
+	if _, _, err := authService.VerifySession(); err != nil {
 		return err
 	}
 	return nil
@@ -1096,6 +1046,7 @@ func printUsage() {
 }
 
 func fail(err error, asJSON bool, baseURL string) {
+	err = normalizeAuthErrorForCLI(err)
 	if asJSON {
 		writeJSON(commandResult{
 			Status:      "error",
@@ -1114,6 +1065,19 @@ func fail(err error, asJSON bool, baseURL string) {
 		}
 	}
 	os.Exit(1)
+}
+
+func normalizeAuthErrorForCLI(err error) error {
+	if err == nil {
+		return nil
+	}
+	if errors.Is(err, themis.ErrSessionExpired) {
+		return themis.ErrSessionExpired
+	}
+	if errors.Is(err, themis.ErrNotAuthenticated) {
+		return themis.ErrNotAuthenticated
+	}
+	return err
 }
 
 func writeJSON(v any) {
