@@ -20,10 +20,9 @@ import (
 const defaultBaseURL = "https://themis.housing.rug.nl"
 
 type commonFlags struct {
-	baseURL           string
-	cookieFile        string
-	defaultCookiePath string
-	jsonOutput        bool
+	baseURL     string
+	sessionFile string
+	jsonOutput  bool
 }
 
 type commandResult struct {
@@ -76,7 +75,7 @@ func runCheck(args []string) {
 	}
 
 	session, err := themis.NewSessionWithAuthConfig(common.baseURL, themis.AuthConfig{
-		SessionFile: resolveSessionFilePath(*common),
+		SessionFile: common.sessionFile,
 	})
 	if err != nil {
 		fail(err, common.jsonOutput, common.baseURL)
@@ -171,7 +170,7 @@ func runList(args []string) {
 	}
 
 	session, err := themis.NewSessionWithAuthConfig(common.baseURL, themis.AuthConfig{
-		SessionFile: resolveSessionFilePath(*common),
+		SessionFile: common.sessionFile,
 	})
 	if err != nil {
 		fail(err, common.jsonOutput, common.baseURL)
@@ -226,7 +225,7 @@ func runFetch(args []string) {
 	}
 
 	session, err := themis.NewSessionWithAuthConfig(common.baseURL, themis.AuthConfig{
-		SessionFile: resolveSessionFilePath(*common),
+		SessionFile: common.sessionFile,
 	})
 	if err != nil {
 		fail(err, common.jsonOutput, common.baseURL)
@@ -312,7 +311,7 @@ func runDiscoverStateFirst(opts discoverOptions) (commandResult, []discovery.Ass
 
 		if opts.fullRefresh || strings.TrimSpace(opts.refreshURL) != "" || needBootstrap {
 			session, err := themis.NewSessionWithAuthConfig(baseURL, themis.AuthConfig{
-				SessionFile: resolveSessionFilePath(opts.common),
+				SessionFile: opts.common.sessionFile,
 			})
 			if err != nil {
 				return commandResult{}, nil, err
@@ -638,7 +637,7 @@ func runTUI(args []string) {
 			return out
 		}
 		session, err := themis.NewSessionWithAuthConfig(baseURL, themis.AuthConfig{
-			SessionFile: resolveSessionFilePath(*common),
+			SessionFile: common.sessionFile,
 		})
 		if err != nil {
 			out.Err = err
@@ -694,7 +693,7 @@ func runTUI(args []string) {
 			return out
 		}
 		session, err := themis.NewSessionWithAuthConfig(baseURL, themis.AuthConfig{
-			SessionFile: resolveSessionFilePath(*common),
+			SessionFile: common.sessionFile,
 		})
 		if err != nil {
 			out.Err = err
@@ -765,13 +764,11 @@ func findRepoRoot(start string) (string, error) {
 func addCommonFlags(fs *flag.FlagSet) *commonFlags {
 	common := &commonFlags{}
 
-	defaultCookiePath := filepath.Join(mustUserHomeDir(), ".config", "themis", "session.json")
-	defaultCookieFile := defaultFromEnv("THEMIS_COOKIE_FILE", defaultFromEnv("THEMIS_COOKIE_PATH", ""))
+	defaultSessionFile := defaultFromEnv("THEMIS_SESSION_FILE", filepath.Join(mustUserHomeDir(), ".config", "themis", "session.json"))
 	defaultBase := defaultFromEnv("THEMIS_BASE_URL", defaultBaseURL)
 
 	fs.StringVar(&common.baseURL, "base-url", defaultBase, "Themis base URL")
-	fs.StringVar(&common.cookieFile, "cookie-file", defaultCookieFile, "Path to cookie file")
-	common.defaultCookiePath = defaultCookiePath
+	fs.StringVar(&common.sessionFile, "session-file", defaultSessionFile, "Path to persisted session file")
 	fs.BoolVar(&common.jsonOutput, "json", false, "Output JSON")
 
 	return common
@@ -796,7 +793,7 @@ func printUsage() {
 	fmt.Println()
 	fmt.Println("Common flags (all subcommands):")
 	fmt.Println("  --base-url <url>")
-	fmt.Println("  --cookie-file <path>")
+	fmt.Println("  --session-file <path>")
 	fmt.Println("  --json")
 	fmt.Println()
 	fmt.Println("Subcommand flags:")
@@ -887,12 +884,4 @@ func resolveOutputDir(outFlag string, targetAlias string) (string, error) {
 		return "", fmt.Errorf("failed to resolve output path %q: %w", selected, err)
 	}
 	return resolved, nil
-}
-
-func resolveSessionFilePath(common commonFlags) string {
-	candidate := strings.TrimSpace(common.cookieFile)
-	if candidate != "" {
-		return candidate
-	}
-	return strings.TrimSpace(common.defaultCookiePath)
 }
