@@ -14,6 +14,7 @@ import (
 	"themis-cli/internal/state"
 	"themis-cli/internal/themis"
 	tuiapp "themis-cli/internal/tui/app"
+	loginui "themis-cli/internal/tui/login"
 	"time"
 )
 
@@ -618,7 +619,36 @@ func runLogin(args []string) {
 }
 
 func runInteractiveLogin(common commonFlags) error {
-	return fmt.Errorf("interactive login TUI is not implemented yet")
+	prefill := loginui.Prefill{}
+	sessionState, err := themis.LoadSessionState(common.sessionFile)
+	if err == nil {
+		prefill.Username = strings.TrimSpace(sessionState.Auth.Username)
+		if sessionState.Auth.SavePassword {
+			prefill.Password = sessionState.Auth.Password
+		}
+		prefill.SaveUsername = sessionState.Auth.SaveUsername
+		prefill.SavePassword = sessionState.Auth.SavePassword
+	} else if !errors.Is(err, os.ErrNotExist) && !errors.Is(err, themis.ErrNotAuthenticated) {
+		return err
+	}
+
+	_, err = loginui.Run(prefill, func(req loginui.SubmitRequest) (loginui.SubmitResult, error) {
+		result, loginErr := themis.PerformSSOLogin(common.baseURL, themis.AuthConfig{SessionFile: common.sessionFile}, themis.LoginRequest{
+			Username:     req.Username,
+			Password:     req.Password,
+			TOTP:         req.TOTP,
+			SaveUsername: req.SaveUsername,
+			SavePassword: req.SavePassword,
+		})
+		if loginErr != nil {
+			return loginui.SubmitResult{}, loginErr
+		}
+		return loginui.SubmitResult{
+			UserFullName: result.User.FullName,
+			UserEmail:    result.User.Email,
+		}, nil
+	})
+	return err
 }
 
 func runNonInteractiveLogin(common commonFlags, inputs loginInputs) (themis.UserData, string, error) {
@@ -654,7 +684,18 @@ func runNonInteractiveLogin(common commonFlags, inputs loginInputs) (themis.User
 		return themis.UserData{}, session.BaseURL, fmt.Errorf("%w: --totp is required for non-interactive login", themis.ErrMissingCredentials)
 	}
 
-	return themis.UserData{}, session.BaseURL, fmt.Errorf("non-interactive SSO login is not implemented yet")
+	loginResult, err := themis.PerformSSOLogin(session.BaseURL, themis.AuthConfig{SessionFile: common.sessionFile}, themis.LoginRequest{
+		Username:     mergedCreds.username,
+		Password:     mergedCreds.password,
+		TOTP:         mergedCreds.totp,
+		SaveUsername: true,
+		SavePassword: true,
+	})
+	if err != nil {
+		return themis.UserData{}, session.BaseURL, err
+	}
+
+	return loginResult.User, session.BaseURL, nil
 }
 
 func resolveNonInteractiveCredentials(sessionFile string, inputs loginInputs) (loginInputs, error) {
