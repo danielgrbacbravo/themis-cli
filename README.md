@@ -9,13 +9,68 @@ go build -o themis ./cmd/themis
 
 ## Usage
 
+### themis
+Open the interactive TUI application.
+
+```sh
+./themis \
+  --base-url "https://themis.housing.rug.nl" \
+  --session-file "$HOME/.config/themis/session.json"
+```
+
+If the persisted session is invalid, bare `themis` opens the login TUI first and then continues into the app on success.
+
+### login
+Authenticate either interactively or non-interactively.
+
+Interactive login:
+
+```sh
+./themis login \
+  --base-url "https://themis.housing.rug.nl" \
+  --session-file "$HOME/.config/themis/session.json"
+```
+
+Non-interactive login:
+
+```sh
+./themis login \
+  --base-url "https://themis.housing.rug.nl" \
+  --session-file "$HOME/.config/themis/session.json" \
+  --username "s1234567" \
+  --password "secret" \
+  --totp "123456"
+```
+
+Notes:
+- `themis login` with no auth flags opens the login TUI.
+- `themis login` with any of `--username`, `--password`, or `--totp` performs a non-interactive login attempt.
+- If username/password are already saved in auth settings, `--totp` alone is enough for non-interactive login.
+- Non-TUI commands never open the login TUI; they return `not authenticated` or `session expired`.
+
+### auth
+View or update persisted auth settings stored alongside the session.
+
+```sh
+./themis auth \
+  --session-file "$HOME/.config/themis/session.json"
+```
+
+Example updates:
+
+```sh
+./themis auth --save-username=true --save-password=true
+./themis auth --username "s1234567"
+./themis auth --clear-password
+```
+
 ### check
 Validate base URL access and authentication.
 
 ```sh
 ./themis check \
   --base-url "https://themis.housing.rug.nl" \
-  --cookie-file "$HOME/.config/themis/cookie.txt"
+  --session-file "$HOME/.config/themis/session.json"
 ```
 
 ### list test cases
@@ -24,7 +79,7 @@ Probe tests from a tests URL (or a specific test file URL) and return valid indi
 ```sh
 ./themis list \
   --base-url "https://themis.housing.rug.nl" \
-  --cookie-file "$HOME/.config/themis/cookie.txt" \
+  --session-file "$HOME/.config/themis/session.json" \
   --tests-url "https://themis.housing.rug.nl/file/.../%40tests/1.in" \
   --start 1 --max 50 --max-misses 5
 ```
@@ -35,7 +90,7 @@ Discover assignment/exercise URLs so agents can find targets without manually pr
 ```sh
 ./themis list \
   --base-url "https://themis.housing.rug.nl" \
-  --cookie-file "$HOME/.config/themis/cookie.txt" \
+  --session-file "$HOME/.config/themis/session.json" \
   --discover \
   --root-url "https://themis.housing.rug.nl/course/2025-2026/os/" \
   --discover-depth 6
@@ -47,7 +102,7 @@ Download discovered `.in/.out` pairs.
 ```sh
 ./themis fetch \
   --base-url "https://themis.housing.rug.nl" \
-  --cookie-file "$HOME/.config/themis/cookie.txt" \
+  --session-file "$HOME/.config/themis/session.json" \
   --tests-url "https://themis.housing.rug.nl/file/.../%40tests/1.in"
 ```
 
@@ -66,16 +121,7 @@ Link the current repository to a Themis course root so state-first discovery and
 
 This writes `.themis/project.json` in the repo root.
 
-### tui
-Open the cached hierarchy browser.
-
-```sh
-./themis tui \
-  --base-url "https://themis.housing.rug.nl" \
-  --cookie-file "$HOME/.config/themis/cookie.txt"
-```
-
-`themis tui` behavior:
+TUI behavior:
 - Uses cached state immediately (no startup crawl).
 - Supports targeted refresh actions from the selected node.
 - Download mode supports multi-select and per-file progress:
@@ -94,8 +140,7 @@ Download path rules in TUI:
 
 Common flags on all subcommands:
 - `--base-url` or `THEMIS_BASE_URL`
-- `--cookie-file` or `THEMIS_COOKIE_FILE` (fallback: `THEMIS_COOKIE_PATH`)
-- `--cookie-env` or `THEMIS_COOKIE_ENV` (name of env var that contains cookie string)
+- `--session-file` or `THEMIS_SESSION_FILE`
 - `--json`
 
 `list` flags:
@@ -116,19 +161,32 @@ Common flags on all subcommands:
 - `--out` (default: `./tests`)
 - `--target-dir` (deprecated alias for `--out`)
 
+`login` flags:
+- `--username`
+- `--password`
+- `--totp`
+
+`auth` flags:
+- `--username`
+- `--password`
+- `--save-username`
+- `--save-password`
+- `--clear-username`
+- `--clear-password`
+
 `project link` flags:
 - `--root-url`
 - `--default-refresh-depth`
 - `--auto-refresh-on-open`
 - `--show-stale-warning-after-minutes`
 
-`tui` flags:
+Bare `themis` flags:
 - `--root-url`
 
-Authentication cookie resolution order:
-1. `--cookie-file`
-2. `--cookie-env`
-3. default path: `$HOME/.config/themis/cookie.txt`
+Auth/session persistence:
+1. Session cookies, saved credentials, and auth preferences live in one session file.
+2. Default session file path is `$HOME/.config/themis/session.json`.
+3. Commands other than bare `themis` do not auto-launch interactive login.
 
 ## JSON Output
 
